@@ -2,89 +2,52 @@
 """cloud-doctor: check this environment's setup WITHOUT printing any secret.
 
 Installed as ~/.local/bin/cloud-doctor by setup.sh. Safe to run from a Claude
-session: it reports only metadata (format, length, whitespace/quotes) and the
-result of a real `gh api user` call, never the token itself.
+session: it reports only whether things are set / registered / working.
 """
 import json
 import os
-import re
-import stat
 import subprocess
 
-HOME = os.path.expanduser("~")
-TOKEN_FILE = os.path.join(HOME, ".config/claude-secrets/gh_token")
-SETTINGS = os.path.join(HOME, ".claude/settings.json")
+SETTINGS = os.path.expanduser("~/.claude/settings.json")
 
 
 def line(ok, label, detail=""):
     print(f"{'OK ' if ok else '!! '} {label}{': ' + detail if detail else ''}")
 
 
-def token_shape(t):
-    if t.startswith("github_pat_"):
-        kind = "fine-grained PAT (github_pat_)"
-    elif re.match(r"gh[pousr]_", t):
-        kind = f"GitHub token ({t[:4]})"
-    else:
-        kind = "UNRECOGNIZED format (not ghp_/github_pat_ - pasted the wrong thing?)"
-    problems = []
-    if re.search(r"\s", t):
-        problems.append("contains whitespace")
-    if t[:1] in "\"'" or t[-1:] in "\"'":
-        problems.append("wrapped in quotes")
-    if t.upper().startswith("GH_TOKEN="):
-        problems.append("value starts with 'GH_TOKEN=' (put only the token in the value)")
-    return kind, problems
-
-
-def gh_works():
-    """A real API call through the gh wrapper. Not `gh auth status`: inside the
-    claude.ai/code container that check reports the token invalid even when
-    every real call succeeds (the egress proxy handles api.github.com auth)."""
-    p = subprocess.run(["bash", "-c", "gh api user --jq .login"],
-                       capture_output=True, text=True, timeout=30)
-    return p.returncode == 0, (p.stdout.strip() or p.stderr.strip().splitlines()[-1:] or ["?"])[0] \
-        if p.returncode else p.stdout.strip()
-
-
 def main():
-    # 1. hooks registered
+    # 1. secret-guard hooks registered
     try:
         hooks = json.load(open(SETTINGS)).get("hooks", {})
-        got = [e for e in ("SessionStart", "PreToolUse", "PostToolUse")
+        got = [e for e, groups in hooks.items()
                if any("secret-guard.py" in h.get("command", "")
-                      for g in hooks.get(e, []) for h in g.get("hooks", []))]
-        line(len(got) == 3, "secret-guard hooks registered", ", ".join(got) or "none")
+                      for g in groups for h in g.get("hooks", []))]
+        want = {"PreToolUse", "PostToolUse"}
+        line(want <= set(got), "secret-guard hooks registered", ", ".join(sorted(got)) or "none")
+        stale = set(got) - want
+        if stale:
+            line(False, "stale secret-guard entries", ", ".join(sorted(stale)) + " (re-run setup.sh)")
     except (OSError, ValueError):
         line(False, "secret-guard hooks registered", f"cannot read {SETTINGS}")
 
-    # 2. token removed from the Bash environment
-    leaked = [v for v in ("GH_TOKEN", "GITHUB_TOKEN") if os.environ.get(v)]
-    line(not leaked, "GH_TOKEN absent from this shell",
-         f"still set: {', '.join(leaked)} (SessionStart hook did not run?)" if leaked else "")
+    # 2. GitHub: no personal token in the environment, handled by the proxy
+    for v in ("GH_TOKEN", "GITHUB_TOKEN"):
+        val = os.environ.get(v)
+        if val and val != "proxy-injected":
+            line(False, v, "a real token is set on the environment: it gives no extra access "
+                           "(the GitHub proxy decides) and anyone using the environment can read it - remove it")
+        else:
+            line(True, v, "unset" if val is None else "proxy-injected (GitHub proxy authenticates gh)")
 
-    # 3. token file
-    try:
-        st = os.stat(TOKEN_FILE)
-        token = open(TOKEN_FILE).read()
-    except OSError:
-        line(False, "token file", "missing: GH_TOKEN is not set on the environment, or the hook did not run")
-        return
-    mode = stat.S_IMODE(st.st_mode)
-    line(mode == 0o600, "token file permissions", oct(mode))
-    token = token.rstrip("\n")
-    kind, problems = token_shape(token)
-    line(not problems and not kind.startswith("UNRECOGNIZED"), "token format",
-         f"{kind}, {len(token)} chars" + (f"; PROBLEM: {'; '.join(problems)}" if problems else ""))
+    p = subprocess.run(["bash", "-c", "gh api user --jq .login"],
+                       capture_output=True, text=True, timeout=30)
+    line(p.returncode == 0, "gh api user",
+         f"authenticated as {p.stdout.strip()}" if p.returncode == 0
+         else ((p.stderr.strip().splitlines() or ["failed"])[-1]))
 
-    # 4. does gh actually work?
-    ok, info = gh_works()
-    line(ok, "gh api user", f"authenticated as {info}" if ok else info)
-
-    # 5. gh wrapper in front
-    gh = subprocess.run(["bash", "-c", "command -v gh"], capture_output=True, text=True).stdout.strip()
-    is_wrapper = bool(gh) and "claude-cloud gh wrapper" in open(gh, errors="ignore").read()
-    line(is_wrapper, "gh resolves to the token-injecting wrapper", gh or "gh not found")
+    # 3. other environment variables the setup expects (names only)
+    for v in ("BRAID_SYNC_URL", "BRAID_DOC_ID"):
+        line(bool(os.environ.get(v)), v, "set" if os.environ.get(v) else "unset")
 
 
 if __name__ == "__main__":
