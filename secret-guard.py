@@ -1,36 +1,34 @@
 #!/usr/bin/env python3
 """
-Claude Code hook: keep secrets (GH_TOKEN, BRAID_DOC_ID, ...) out of the model's
-context. Installed by setup.sh; one script, dispatched on hook_event_name:
+Claude Code hook: keep secrets set on the environment (BRAID_DOC_ID, ...) out
+of the model's context. Installed by setup.sh; one script, dispatched on
+hook_event_name:
 
-  SessionStart  -> copy GH_TOKEN to a 600 file (refreshed every session, so a
-                   rotated token is picked up even though the setup script is
-                   cached), then unset GH_TOKEN/GITHUB_TOKEN for every Bash tool
-                   command via $CLAUDE_ENV_FILE. `gh` reads the file through its
-                   wrapper.
   PreToolUse    -> deny commands/reads that would dump a secret
-                   (xtrace, env dumps, `gh auth token`, `braid secret`, ...).
+                   (xtrace, env dumps, `$BRAID_DOC_ID`, `braid secret`, ...).
   PostToolUse   -> if a secret value or GitHub token pattern shows up in a tool
                    output, replace the output (updatedToolOutput) with a
                    redacted copy before Claude sees it.
 
+GitHub is not handled here: in claude.ai/code the platform's GitHub proxy
+authenticates `gh`/git, and GH_TOKEN is just the placeholder "proxy-injected".
+
 Fails open on its own errors (never breaks a tool call). This stops accidental
-leaks into the transcript; it is not a sandbox. Keep tokens fine-grained,
-repo-scoped and short-lived.
+leaks into the transcript; it is not a sandbox. For HTTP API keys prefer the
+environment's "API credentials", which never enter the container.
 """
 import json
 import os
 import re
 import sys
 
-SECRET_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "BRAID_DOC_ID")
-SECRETS_DIR = os.path.expanduser("~/.config/claude-secrets")
-TOKEN_FILE = os.path.join(SECRETS_DIR, "gh_token")
+# Environment variables whose values must never reach the transcript.
+SECRET_VARS = ("BRAID_DOC_ID",)
 
 # GitHub token formats: classic/OAuth/user/server/refresh + fine-grained PATs.
 TOKEN_RE = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b")
 
-SECRET_PATHS = r"(?:claude-secrets|\.config/gh/hosts\.yml|\.braid\.toml|\.git-credentials)"
+SECRET_PATHS = r"(?:\.config/gh/hosts\.yml|\.braid\.toml|\.git-credentials)"
 # Start of a shell command: start of a line, after a separator, or after sudo.
 CMD_START = r"(?:^|[;&|(\n]\s*|\bsudo\s+)"
 DENY_BASH = [
@@ -41,7 +39,7 @@ DENY_BASH = [
     (r"\bprintenv\s+\w*(?:TOKEN|SECRET|DOC_ID|PASSWORD|KEY)\b",
      "printing a secret environment variable"),
     (r"\$\{?!?(?:" + "|".join(SECRET_VARS) + r")\b",
-     "referencing a secret variable in a command; use the tool that needs it (gh, braid) instead"),
+     "referencing a secret variable in a command; use the tool that needs it (braid) instead"),
     (r"/proc/[^\s]*/environ", "reading a process environment would print secrets"),
     (r"\bgh\s+auth\s+(?:token|git-credential|status\b.*(?:-t\b|--show-token))", "prints the GitHub token"),
     (r"\bgit\s+credential\s+fill\b|\bgit\s+credential-\w+\s+get\b", "prints stored git credentials"),
@@ -55,11 +53,6 @@ DENY_PATH = re.compile(SECRET_PATHS)
 
 def secret_values():
     vals = {os.environ.get(v, "") for v in SECRET_VARS}
-    try:
-        with open(TOKEN_FILE) as f:
-            vals.add(f.read().strip())
-    except OSError:
-        pass
     return sorted((v for v in vals if len(v) >= 12), key=len, reverse=True)
 
 
@@ -93,20 +86,6 @@ def deny(reason):
     }}))
 
 
-def session_start():
-    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if token:
-        os.makedirs(SECRETS_DIR, mode=0o700, exist_ok=True)
-        os.chmod(SECRETS_DIR, 0o700)
-        fd = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
-            f.write(token)
-    env_file = os.environ.get("CLAUDE_ENV_FILE")
-    if env_file:
-        with open(env_file, "a") as f:
-            f.write("unset GH_TOKEN GITHUB_TOKEN\n")
-
-
 def pre_tool_use(data):
     tool, inp = data.get("tool_name", ""), data.get("tool_input") or {}
     if tool == "Bash":
@@ -136,9 +115,7 @@ def post_tool_use(data):
 def main():
     data = json.load(sys.stdin)
     event = data.get("hook_event_name")
-    if event == "SessionStart":
-        session_start()
-    elif event == "PreToolUse":
+    if event == "PreToolUse":
         pre_tool_use(data)
     elif event == "PostToolUse":
         post_tool_use(data)
