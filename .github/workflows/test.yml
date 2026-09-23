@@ -1,0 +1,22 @@
+name: test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: for f in *.sh; do bash -n "$f"; done
+      - name: shellcheck
+        run: shellcheck -S warning *.sh
+      - name: secret-guard tests
+        run: python3 test_secret_guard.py
+      - name: setup.sh in a scratch HOME
+        run: |
+          HOME="$(mktemp -d)" bash setup.sh
+          # hooks registered once, even when re-run
+          HOME="$RUNNER_TEMP/h" bash -c 'bash setup.sh >/dev/null && bash setup.sh >/dev/null && python3 -c "import json,os; h=json.load(open(os.path.expanduser(\"~/.claude/settings.json\")))[\"hooks\"]; assert all(len(v)==1 for v in h.values()), h; print(\"hooks ok\")"'
