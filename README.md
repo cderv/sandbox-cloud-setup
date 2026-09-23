@@ -14,6 +14,7 @@ settings on claude.ai (see [Keeping it public](#keeping-it-public)).
 | `setup.sh` | Installs `gh` (behind a wrapper) and any extra tools, then registers the secret-guard hooks. |
 | `secret-guard.py` | A Claude Code hook: moves the token out of Claude's environment, blocks commands that would print secrets, and redacts secrets from tool output. |
 | `gh-wrapper.sh` | Installed as `~/.local/bin/gh`. Gives the token to `gh` only. |
+| `cloud-doctor.py` | Installed as `~/.local/bin/cloud-doctor`. Checks the setup and prints no secrets. |
 | `test_secret_guard.py` | Offline tests for the guard, also run in CI. |
 
 ## How claude.ai/code runs it
@@ -121,19 +122,34 @@ includes the secret guard itself.
 
 ### 5. Check it
 
-Start a new session in the environment and ask Claude to run:
+Start a new session in the environment and ask Claude to run each of these
+**as separate commands**. The guard blocks a whole command if any part of it
+touches a secret.
 
 ```bash
-gh auth status           # authenticated, via the wrapper
+cloud-doctor              # hooks, token file, token format, a real gh call - never prints the token
 echo "${GH_TOKEN:-unset}" # should be BLOCKED by secret-guard (proves PreToolUse works)
-printenv | wc -l         # should be BLOCKED too
+printenv | wc -l          # should be BLOCKED too
 ```
 
-If `gh` is unauthenticated, check that `GH_TOKEN` is set on the environment.
+> **Don't use `gh auth status` to check the token here.** Inside the
+> claude.ai/code container it reports "The token in GH_TOKEN is invalid" even
+> when the token is valid and every real call (`gh api user`, `gh pr list`, ...)
+> works. Outgoing traffic goes through the environment's egress proxy, which
+> handles authentication to `api.github.com`, and that confuses gh's own check.
+> Test with a real call instead: `gh api user --jq .login`.
+
+If `cloud-doctor` reports a problem:
+
+- **Token file missing:** `GH_TOKEN` isn't set on the environment.
+- **Format problem** (quotes, whitespace, `GH_TOKEN=` inside the value): fix
+  the variable's value in the environment settings.
+- **`gh api user` fails:** check the network policy, and whether the token has
+  expired.
+
 The setup log starts with `bootstrap: at commit <sha>`, so you can confirm
-which version ran.
-If nothing is blocked, check the setup log for the `secret-guard: hooks
-registered` line.
+which version ran. If nothing is blocked, check the setup log for the
+`secret-guard: hooks registered` line.
 
 ## Day-to-day
 

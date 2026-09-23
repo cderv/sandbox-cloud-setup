@@ -55,6 +55,7 @@ step "extra tools"
 # ============================================================================
 step "secret-guard hooks"
 install -m755 "$HERE/secret-guard.py" "$HOOKS_DIR/secret-guard.py"
+install -m755 "$HERE/cloud-doctor.py" "$BIN_DIR/cloud-doctor"
 
 # Register the hooks in user settings (merged, idempotent: previous
 # secret-guard entries are replaced, anything else is kept).
