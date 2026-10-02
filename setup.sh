@@ -53,6 +53,28 @@ fi
 step "extra tools"
 # e.g. uv tool install ruff || echo "ruff install skipped"
 
+# --- braid (automerge sync client): the official signed + sha256-verified
+#     installer, fetched at the pinned tag. Bump deliberately and keep every
+#     peer (laptop, cloud) on the same version. minisign (optional) lets the
+#     installer check the Ed25519 release signature; without it, checksum only.
+BRAID_VER="0.7.0"
+step "braid v$BRAID_VER"
+if "$BIN_DIR/braid" --version 2>/dev/null | grep -q "$BRAID_VER"; then
+  echo "braid already installed: $("$BIN_DIR/braid" --version)"
+else
+  command -v minisign >/dev/null 2>&1 \
+    || { apt-get update -qq && apt-get install -y -qq minisign; } >/dev/null 2>&1 || true
+  skip=""; command -v minisign >/dev/null 2>&1 || skip="--insecure-skip-signature"
+  w="$(mktemp -d)"
+  if curl -fsSL "https://raw.githubusercontent.com/cscheid/braid/v${BRAID_VER}/install.sh" -o "$w/install.sh" \
+     && bash "$w/install.sh" --version "v${BRAID_VER}" --dest "$BIN_DIR" $skip; then
+    echo "braid installed: $("$BIN_DIR/braid" --version 2>/dev/null || echo '?')"
+  else
+    echo "braid install skipped (non-fatal - check network access to github.com)"
+  fi
+  rm -rf "$w"
+fi
+
 # ============================================================================
 # --- Secret guard: keep secrets set on the environment (BRAID_DOC_ID, ...)
 #   out of Claude's context.
