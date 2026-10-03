@@ -4,10 +4,11 @@
 # Never fails the session start: every problem is reported, then exit 0.
 set -uo pipefail
 
-# Which version to install. Edit THIS line to update or pin: editing the setup
-# script is what makes claude.ai/code rebuild its cached environment (changing
-# an environment variable alone does not). Prefer a commit SHA you reviewed;
-# use the full 40-char SHA. A branch or tag also works. CLOUD_SETUP_REF, if set, overrides it.
+# Paste once, never edit. Updates arrive by themselves: setup.sh installs a
+# SessionStart hook that, on each new session, fetches this repo at
+# CLOUD_SETUP_REF (default: main) and re-runs setup.sh when that commit changed.
+# To pin or roll back, set CLOUD_SETUP_REF (branch, tag or full 40-char SHA)
+# in the environment's variables: new sessions pick it up.
 PIN="main"
 REF="${CLOUD_SETUP_REF:-$PIN}"
 REPO="${CLOUD_SETUP_REPO:-https://github.com/cderv/sandbox-cloud-setup}"

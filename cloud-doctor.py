@@ -9,6 +9,7 @@ import os
 import subprocess
 
 SETTINGS = os.path.expanduser("~/.claude/settings.json")
+STATE = os.path.expanduser("~/.config/cloud-setup/state")
 
 
 def line(ok, label, detail=""):
@@ -27,8 +28,30 @@ def main():
         stale = set(got) - want
         if stale:
             line(False, "stale secret-guard entries", ", ".join(sorted(stale)) + " (re-run setup.sh)")
+        start = [g.get("matcher", "") for g in hooks.get("SessionStart", [])
+                 if any("cloud-setup-session-start.sh" in h.get("command", "")
+                        for h in g.get("hooks", []))]
+        line(bool(start), "session-start hook registered", ", ".join(start) or "none")
     except (OSError, ValueError):
         line(False, "secret-guard hooks registered", f"cannot read {SETTINGS}")
+
+    # 1b. installed commit + expected tools (recorded by setup.sh)
+    state = {}
+    try:
+        with open(STATE) as f:
+            for raw in f:
+                k, _, v = raw.strip().partition("=")
+                state[k] = v
+    except OSError:
+        pass
+    line(bool(state.get("rev")), "setup commit",
+         f"{state.get('rev', 'none')[:12]} (wanted ref: {os.environ.get('CLOUD_SETUP_REF', 'main')})")
+    p = subprocess.run(["bash", "-c", "braid --version"], capture_output=True, text=True)
+    got = p.stdout.strip() if p.returncode == 0 else "missing"
+    want = state.get("braid", "")
+    line(bool(want) and want in got, "braid", f"{got} (expected {want or '?'})")
+    p = subprocess.run(["bash", "-c", "command -v gh"], capture_output=True, text=True)
+    line(p.returncode == 0, "gh", p.stdout.strip() or "missing")
 
     # 2. GitHub: no personal token in the environment, handled by the proxy
     for v in ("GH_TOKEN", "GITHUB_TOKEN"):
