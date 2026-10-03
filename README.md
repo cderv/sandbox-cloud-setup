@@ -10,8 +10,9 @@ settings on claude.ai (see [Keeping it public](#keeping-it-public)).
 
 | File | Role |
 |---|---|
-| `bootstrap.sh` | The only thing pasted into claude.ai. Fetches this repo at `PIN` and runs `setup.sh`. |
-| `setup.sh` | Installs `gh` if the image lacks it, plus any extra tools, then registers the secret-guard hooks. |
+| `bootstrap.sh` | The only thing pasted into claude.ai, **once, never edited**. Fetches this repo (`main`, or `CLOUD_SETUP_REF`) and runs `setup.sh`. |
+| `setup.sh` | Installs `gh` if the image lacks it, plus extra tools (braid), registers the hooks, records what it installed. |
+| `session-start.sh` | SessionStart hook: brings the environment to `CLOUD_SETUP_REF` (default `main`) at each new session, repairs a missing tool, warns when something is off. |
 | `secret-guard.py` | A Claude Code hook: blocks commands that would print secrets and redacts secrets from tool output. |
 | `cloud-doctor.py` | Installed as `~/.local/bin/cloud-doctor`. Checks the setup and prints no secrets. |
 | `test_secret_guard.py` | Offline tests for the guard, also run in CI. |
@@ -49,10 +50,18 @@ your fork on GitHub.
      ├─ fetches that version into /opt/sandbox-cloud-setup (public, no token)
      └─ runs setup.sh
           ├─ gh (only if missing) → ~/.local/bin/gh
-          ├─ extra tools
-          └─ secret-guard.py      → ~/.claude/hooks/, registered in ~/.claude/settings.json
+          ├─ extra tools          → braid (pinned)
+          ├─ secret-guard.py + session-start.sh → ~/.claude/hooks/, registered in ~/.claude/settings.json
+          └─ ~/.config/cloud-setup/state  (rev= installed commit, braid= expected version)
 
-2. EVERY TOOL CALL
+2. EVERY NEW OR RESUMED SESSION (SessionStart hook, NOT cached)
+   session-start.sh
+     ├─ fetches this repo at CLOUD_SETUP_REF (default main)
+     ├─ that commit != rev= ?  → re-runs its setup.sh (idempotent)
+     ├─ a tool missing / wrong version ? → re-runs setup.sh once (repair)
+     └─ reports: one line to Claude when healthy, a warning to you otherwise
+
+3. EVERY TOOL CALL
    PreToolUse  → deny commands that would print a secret (env dump, set -x,
                  echo $BRAID_DOC_ID, braid secret, curl -v, ...)
    PostToolUse → if a secret value or a GitHub token pattern appears in the
@@ -70,10 +79,14 @@ rebuilt, only when:
 - the cache is about **7 days** old.
 
 Changing an environment **variable** is not listed as a trigger, and neither
-is a **push to this repo**. A resumed session never re-runs setup. So **to
-roll out a new version, edit the `PIN="..."` line in the pasted setup
-script**. That edit is what forces the rebuild. Setting the `CLOUD_SETUP_REF`
-variable still overrides `PIN`, but may not rebuild on its own.
+is a **push to this repo**. That is why updates don't rely on the cache:
+`session-start.sh` runs at every new or resumed session, fetches the wanted
+commit and re-runs `setup.sh` only when it changed (a `git fetch` otherwise).
+So **a push to `main` reaches the next new session, and the pasted script
+never needs editing.** Pin or roll back with the `CLOUD_SETUP_REF` variable:
+new sessions use the new value (an already-open session keeps the old one).
+Rolling back below the commit that added `session-start.sh` would stop the
+self-update: pin a commit that contains it.
 
 Limits: the setup script must finish in about 5 minutes, and a non-zero exit
 fails the session. `bootstrap.sh` and `setup.sh` therefore treat every step as
@@ -92,24 +105,23 @@ Edit** (or create a new environment), then:
 2. **Network access:** the default *Trusted* level covers GitHub and the
    package registries.
 3. **Setup script:** paste the full contents of [`bootstrap.sh`](bootstrap.sh)
-   and set the pin:
+   as is (`PIN="main"`), once. Don't edit it afterwards.
 
-   ```bash
-   PIN="<full 40-char commit SHA>"   # recommended: a commit on main you reviewed (short SHAs do not work)
-   # or
-   PIN="main"                        # follow main (updates only when the cache rebuilds)
-   ```
-
-   **Pin to a SHA.** The setup script runs as root before Claude starts. With
-   `PIN="main"`, anything pushed to `main` is installed the next time the cache
-   rebuilds, and that includes the secret guard itself.
+   **Trust model.** By default every new session follows `main`, as root,
+   including the secret guard itself. That is fine while only the owner can
+   push here (protect the GitHub account with 2FA). To freeze an environment
+   on a reviewed commit instead, set the variable
+   `CLOUD_SETUP_REF=<full 40-char SHA>` (short SHAs do not work). A
+   `PIN="<SHA>"` already in a pasted script is honored too: the session hook
+   follows what the bootstrap was asked for, and only `CLOUD_SETUP_REF`
+   overrides it.
 
 4. **Check it:** start a new session and ask Claude to run these as
    **separate commands** (the guard blocks a whole command if any part of it
    touches a secret):
 
    ```bash
-   cloud-doctor              # hooks, GH_TOKEN state, a real gh call, expected vars - no secrets printed
+   cloud-doctor              # hooks, installed commit, braid/gh versions, GH_TOKEN state, a real gh call, expected vars - no secrets printed
    echo "${BRAID_DOC_ID:-x}" # should be BLOCKED by secret-guard (proves PreToolUse works)
    printenv | wc -l          # should be BLOCKED too
    ```
@@ -122,10 +134,11 @@ Edit** (or create a new environment), then:
 
 | I want to... | Do |
 |---|---|
-| Update the setup | Merge to `main` (CI runs the tests), then change `PIN` to the new SHA in each environment's setup script. |
-| Test a change first | Push a branch, then in a test environment set `PIN="<branch>"` (or `CLOUD_SETUP_REF`) and start a new session. |
-| Add a tool | Add a line to *Extra tools* in `setup.sh`, ending in `\|\| echo "... skipped"` so a failure never blocks a session. Tools only one project needs belong in that project's own `SessionStart` hook instead. |
-| Add another environment | Repeat the setup steps. The pasted bootstrap is identical everywhere, only `PIN` and the variables differ. |
+| Update the setup | Merge to `main` (CI runs the tests). The next new session picks it up. Nothing to edit on claude.ai. |
+| Freeze / roll back an environment | Set `CLOUD_SETUP_REF=<full SHA>` in its variables, start a new session. Unset it to follow `main` again. |
+| Test a change first | Push a branch, set `CLOUD_SETUP_REF=<branch>` in a test environment, start a new session. |
+| Add a tool | Add it to *Extra tools* in `setup.sh` (non-fatal, skip when already at the pinned version), record its version in the state file and check it in `session-start.sh` + `cloud-doctor.py`. Tools only one project needs belong in that project's own `SessionStart` hook instead. |
+| Add another environment | Repeat the setup steps. The pasted bootstrap is identical everywhere, only the variables differ. |
 | Protect a new secret variable | Add its name to `SECRET_VARS` in `secret-guard.py`, and add a case to `test_secret_guard.py`. |
 
 ## What the secret guard covers
@@ -154,5 +167,6 @@ Nothing here is secret, and it has to stay that way:
    setup belongs in that project's own `SessionStart` hook.
 3. **CI needs no secrets, so don't add any.** Keep GitHub's default behaviour
    that workflows on pull requests from forks run without your permissions.
-4. **Only the owner can change this repo.** Pinning `PIN` to a SHA means even
-   a change to `main` reaches an environment only when you move the pin.
+4. **Only the owner can change this repo.** A push to `main` reaches every
+   environment that follows `main` at its next new session. An environment
+   with `CLOUD_SETUP_REF=<SHA>` only moves when you change that variable.

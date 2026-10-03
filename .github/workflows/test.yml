@@ -22,3 +22,15 @@ jobs:
           HOME="$(mktemp -d)" bash setup.sh
           # hooks registered once, even when re-run
           HOME="$RUNNER_TEMP/h" bash -c 'bash setup.sh >/dev/null && bash setup.sh >/dev/null && python3 -c "import json,os; h=json.load(open(os.path.expanduser(\"~/.claude/settings.json\")))[\"hooks\"]; assert all(len(v)==1 for v in h.values()), h; print(\"hooks ok\")"'
+      - name: session-start.sh (healthy start, then self-repair of a missing tool)
+        env:
+          CLOUD_SETUP_REPO: ${{ github.workspace }}
+          CLOUD_SETUP_REF: ${{ github.sha }}
+          BRAID_SYNC_URL: wss://example.invalid
+        run: |
+          export HOME="$RUNNER_TEMP/h" PATH="$RUNNER_TEMP/h/.local/bin:$PATH"
+          out="$(bash session-start.sh)"; echo "$out"; [[ "$out" == "cloud-setup: up to date"* ]]
+          rm "$HOME/.local/bin/braid"
+          out="$(bash session-start.sh)"; echo "$out"; [[ "$out" == "cloud-setup: up to date"* ]]
+          unset BRAID_SYNC_URL
+          bash session-start.sh | python3 -c "import json,sys; d=json.load(sys.stdin); assert 'BRAID_SYNC_URL' in d['systemMessage'], d; print('warning ok')"
