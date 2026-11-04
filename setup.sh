@@ -62,7 +62,7 @@ step "extra tools"
 #     installer, fetched at the pinned tag. Bump deliberately and keep every
 #     peer (laptop, cloud) on the same version. minisign (optional) lets the
 #     installer check the Ed25519 release signature; without it, checksum only.
-BRAID_VER="0.7.0"
+BRAID_VER="0.8.1"
 step "braid v$BRAID_VER"
 if "$BIN_DIR/braid" --version 2>/dev/null | grep -q "$BRAID_VER"; then
   echo "braid already installed: $("$BIN_DIR/braid" --version)"
