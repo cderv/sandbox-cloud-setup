@@ -102,7 +102,9 @@ main() {
 
   # --- 3. report
   if [ "${#problems[@]}" -eq 0 ]; then
-    echo "cloud-setup: up to date (rev ${have_rev:0:7}, ${braid_got:-braid ?}, gh ok)"
+    local extra=""
+    [ -n "${CLOUD_SETUP_QUARTO:-}" ] && extra=", quarto $("$HOME/.local/bin/quarto" --version 2>/dev/null)"
+    echo "cloud-setup: up to date (rev ${have_rev:0:7}, ${braid_got:-braid ?}, gh ok${extra})"
   else
     msg="cloud-setup WARNING: $(IFS=';'; echo "${problems[*]}"). Tell the user; run cloud-doctor for details."
     python3 -c 'import json,sys; m=sys.argv[1]; print(json.dumps({"systemMessage": m, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": m}}))' "$msg"
