@@ -16,13 +16,29 @@
 # session: always exit 0. Prints no secret (variable names only).
 set -uo pipefail
 
-# tools_ok <state-file>: braid at the recorded version and gh present.
+# tools_ok <state-file>: braid at the recorded version, gh present, and the
+# opt-in features match the environment's variables.
 tools_ok() {
   local want
   want="$(sed -n 's/^braid=//p' "$1" 2>/dev/null)"
   [ -n "$want" ] \
     && [[ "$("$HOME/.local/bin/braid" --version 2>/dev/null)" == *"$want"* ]] \
-    && command -v gh >/dev/null 2>&1
+    && command -v gh >/dev/null 2>&1 \
+    && features_ok "$1"
+}
+
+# features_ok <state-file>: each CLOUD_SETUP_<FEATURE> variable is the one
+# setup.sh last ran with, and what it asks for is installed. A variable added
+# or changed on the environment fails this, so the repair step installs it.
+features_ok() {
+  local q="${CLOUD_SETUP_QUARTO:-}"
+  [ "${CLOUD_SETUP_ATTRIBUTION:-}" = "$(sed -n 's/^attribution=//p' "$1" 2>/dev/null)" ] || return 1
+  [ "$q" = "$(sed -n 's/^quarto=//p' "$1" 2>/dev/null)" ] || return 1
+  [ -z "$q" ] && return 0
+  case "$q" in
+    release|prerelease) "$HOME/.local/bin/quarto" --version >/dev/null 2>&1 ;;
+    *) [ "$("$HOME/.local/bin/quarto" --version 2>/dev/null)" = "$q" ] ;;
+  esac
 }
 
 main() {
@@ -81,6 +97,7 @@ main() {
     problems+=("braid ${braid_got:-missing}, expected $braid_want")
   fi
   command -v gh >/dev/null 2>&1 || problems+=("gh missing")
+  features_ok "$state" || problems+=("opt-in feature not installed as requested (CLOUD_SETUP_QUARTO=${CLOUD_SETUP_QUARTO:-unset})")
   [ -n "${BRAID_SYNC_URL:-}" ] || problems+=("BRAID_SYNC_URL unset - braid would use the PUBLIC relay")
 
   # --- 3. report

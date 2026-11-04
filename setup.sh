@@ -81,6 +81,58 @@ else
 fi
 
 # ============================================================================
+# --- Opt-in features: each environment turns them on with a variable, the
+#     pasted script never changes. Unset = not installed. session-start.sh
+#     re-runs this file when a requested feature is missing or its variable
+#     changed (a variable change alone does not rebuild the cached image).
+#
+#   CLOUD_SETUP_QUARTO      = release | prerelease | <exact version, e.g. 1.11.9>
+#   CLOUD_SETUP_ATTRIBUTION = keep  (default: no Claude attribution in commits
+#                                    and PRs; applied with the hooks below)
+# ============================================================================
+QUARTO_WANT="${CLOUD_SETUP_QUARTO:-}"
+
+# quarto_resolve <spec>: release/prerelease -> current version from quarto.org.
+quarto_resolve() {
+  local url
+  case "$1" in
+    release)    url="https://quarto.org/docs/download/_download.json" ;;
+    prerelease) url="https://quarto.org/docs/download/_prerelease.json" ;;
+    *)          echo "$1"; return 0 ;;
+  esac
+  curl -fsSL "$url" | python3 -c 'import sys, json; print(json.load(sys.stdin)["version"])'
+}
+
+# install_quarto <version>: GitHub release tarball into /opt/quarto/<version>,
+# linked as $BIN_DIR/quarto. Older versions stay on disk (switching back is free).
+install_quarto() {
+  local ver="$1" dest="/opt/quarto/$1" w rc
+  w="$(mktemp -d)"
+  curl -fsSL "https://github.com/quarto-dev/quarto-cli/releases/download/v${ver}/quarto-${ver}-linux-amd64.tar.gz" -o "$w/quarto.tgz" \
+    && rm -rf "$dest" && mkdir -p "$dest" \
+    && tar -xzf "$w/quarto.tgz" -C "$dest" --strip-components=1 \
+    && ln -sf "$dest/bin/quarto" "$BIN_DIR/quarto"
+  rc=$?
+  rm -rf "$w"
+  return $rc
+}
+
+if [ -n "$QUARTO_WANT" ]; then
+  step "quarto ($QUARTO_WANT)"
+  quarto_ver="$(quarto_resolve "$QUARTO_WANT" 2>/dev/null)"
+  quarto_got="$("$BIN_DIR/quarto" --version 2>/dev/null)"
+  if [ -z "$quarto_ver" ]; then
+    echo "quarto: could not resolve '$QUARTO_WANT' from quarto.org (kept: ${quarto_got:-none})"
+  elif [ "$quarto_got" = "$quarto_ver" ]; then
+    echo "quarto already installed: $quarto_got"
+  elif install_quarto "$quarto_ver"; then
+    echo "quarto installed: $("$BIN_DIR/quarto" --version 2>/dev/null || echo '?')"
+  else
+    echo "quarto install skipped (non-fatal - check network access to github.com)"
+  fi
+fi
+
+# ============================================================================
 # --- Secret guard: keep secrets set on the environment (BRAID_DOC_ID, ...)
 #   out of Claude's context.
 #   PreToolUse:  deny commands that would dump secrets.
@@ -117,6 +169,12 @@ for event in ("PreToolUse", "PostToolUse"):
 hooks.setdefault("SessionStart", []).append(
     {"matcher": "startup|resume",
      "hooks": [{"type": "command", "command": f"bash {start}", "timeout": 300}]})
+# No Co-Authored-By trailer or session link in commits and PRs, unless the
+# environment sets CLOUD_SETUP_ATTRIBUTION=keep.
+if os.environ.get("CLOUD_SETUP_ATTRIBUTION") == "keep":
+    cfg.pop("attribution", None)
+else:
+    cfg["attribution"] = {"commit": "", "pr": ""}
 os.makedirs(os.path.dirname(path), exist_ok=True)
 with open(path, "w") as f:
     json.dump(cfg, f, indent=2)
@@ -141,6 +199,8 @@ mkdir -p "$HOME/.config/cloud-setup"
   echo "ref=${base_ref:-$rev}"
   echo "repo=${base_repo:-https://github.com/cderv/sandbox-cloud-setup}"
   echo "braid=$BRAID_VER"
+  echo "quarto=$QUARTO_WANT"
+  echo "attribution=${CLOUD_SETUP_ATTRIBUTION:-}"
 } > "$HOME/.config/cloud-setup/state"
 
 # --- Sanity warnings (non-fatal): catch a half-configured environment early.

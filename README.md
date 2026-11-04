@@ -138,8 +138,24 @@ Edit** (or create a new environment), then:
 | Freeze / roll back an environment | Set `CLOUD_SETUP_REF=<full SHA>` in its variables, start a new session. Unset it to follow `main` again. |
 | Test a change first | Push a branch, set `CLOUD_SETUP_REF=<branch>` in a test environment, start a new session. |
 | Add a tool | Add it to *Extra tools* in `setup.sh` (non-fatal, skip when already at the pinned version), record its version in the state file and check it in `session-start.sh` + `cloud-doctor.py`. Tools only one project needs belong in that project's own `SessionStart` hook instead. |
+| Turn on a feature for one environment | Set its variable (see *Opt-in features* below) and start a new session. The session-start hook notices the change and installs it. |
+| Add an opt-in feature | Add a `CLOUD_SETUP_<NAME>` block to the *Opt-in features* section of `setup.sh`, record the variable in the state file, compare it in `features_ok` (`session-start.sh`) and report it in `cloud-doctor.py`. |
 | Add another environment | Repeat the setup steps. The pasted bootstrap is identical everywhere, only the variables differ. |
 | Protect a new secret variable | Add its name to `SECRET_VARS` in `secret-guard.py`, and add a case to `test_secret_guard.py`. |
+
+## Opt-in features
+
+The pasted script is the same in every environment. An environment's
+variables choose what else it gets:
+
+| Variable | Values | Effect |
+|---|---|---|
+| `CLOUD_SETUP_QUARTO` | `release`, `prerelease`, or an exact version (`1.11.9`) | Installs Quarto from its GitHub release into `/opt/quarto/<version>`, linked as `~/.local/bin/quarto`. Unset: no Quarto. `release` and `prerelease` resolve the current version from quarto.org when setup runs. |
+| `CLOUD_SETUP_ATTRIBUTION` | `keep` | By default setup sets `"attribution": {"commit": "", "pr": ""}` in `~/.claude/settings.json`, so commits and PRs carry no Claude trailer or session link. `keep` leaves Claude Code's default attribution. |
+
+Changing a variable does not rebuild the cached image, so the session-start
+hook compares each variable with the value `setup.sh` last ran with and
+re-runs it on a mismatch or a missing tool.
 
 ## What the secret guard covers
 
