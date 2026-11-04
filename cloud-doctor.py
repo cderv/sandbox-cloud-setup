@@ -53,6 +53,22 @@ def main():
     p = subprocess.run(["bash", "-c", "command -v gh"], capture_output=True, text=True)
     line(p.returncode == 0, "gh", p.stdout.strip() or "missing")
 
+    # 1c. opt-in features (CLOUD_SETUP_* variables on the environment)
+    q = os.environ.get("CLOUD_SETUP_QUARTO", "")
+    if q:
+        p = subprocess.run(["bash", "-c", "quarto --version"], capture_output=True, text=True)
+        got = p.stdout.strip() if p.returncode == 0 else "missing"
+        ok = got != "missing" and (q in ("release", "prerelease") or got == q)
+        line(ok and state.get("quarto") == q, "quarto",
+             f"{got} (CLOUD_SETUP_QUARTO={q}, setup ran with {state.get('quarto') or 'unset'})")
+    try:
+        attribution = json.load(open(SETTINGS)).get("attribution")
+    except (OSError, ValueError):
+        attribution = None
+    keep = os.environ.get("CLOUD_SETUP_ATTRIBUTION") == "keep"
+    line(keep or attribution == {"commit": "", "pr": ""}, "commit/PR attribution",
+         "kept (CLOUD_SETUP_ATTRIBUTION=keep)" if keep else f"settings: {attribution}")
+
     # 2. GitHub: no personal token in the environment, handled by the proxy
     for v in ("GH_TOKEN", "GITHUB_TOKEN"):
         val = os.environ.get(v)
