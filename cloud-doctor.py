@@ -2,7 +2,9 @@
 """cloud-doctor: check this environment's setup WITHOUT printing any secret.
 
 Installed as ~/.local/bin/cloud-doctor by setup.sh. Safe to run from a Claude
-session: it reports only whether things are set / registered / working.
+session: it reports only whether things are set / registered / working:
+hooks, installed commit, braid / gh, each opt-in feature requested by a
+CLOUD_SETUP_* variable (Quarto, R, uv, Python, attribution), GitHub access.
 """
 import json
 import os
