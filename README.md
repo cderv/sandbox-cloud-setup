@@ -51,6 +51,7 @@ your fork on GitHub.
      └─ runs setup.sh
           ├─ gh (only if missing) → ~/.local/bin/gh
           ├─ extra tools          → braid (pinned)
+          ├─ opt-in features      → Quarto, R (rig) when their CLOUD_SETUP_* variable is set
           ├─ secret-guard.py + session-start.sh → ~/.claude/hooks/, registered in ~/.claude/settings.json
           └─ ~/.config/cloud-setup/state  (rev= installed commit, braid= expected version)
 
@@ -151,11 +152,18 @@ variables choose what else it gets:
 | Variable | Values | Effect |
 |---|---|---|
 | `CLOUD_SETUP_QUARTO` | `release`, `prerelease`, or an exact version (`1.11.9`) | Installs Quarto from its GitHub release into `/opt/quarto/<version>`, linked as `~/.local/bin/quarto`. Unset: no Quarto. `release` and `prerelease` resolve the current version from quarto.org when setup runs. |
+| `CLOUD_SETUP_R` | `release` or an exact version (`4.5.2`) | Installs [rig](https://github.com/r-lib/rig) (pinned, into `/usr/local`), then `rig add <version>`: Posit's R build for Ubuntu 24.04 in `/opt/R/<version>`, made the default and linked as `/usr/local/bin/R` and `Rscript`. rig also sets the Posit Package Manager binary repo (fast `install.packages()`) and installs pak. Unset: no R. `release` resolves the current version (`rig resolve`) when setup runs. Project packages don't go here: keep them in the project (renv or `DESCRIPTION`). |
 | `CLOUD_SETUP_ATTRIBUTION` | `keep` | By default setup sets `"attribution": {"commit": "", "pr": ""}` in `~/.claude/settings.json`, so commits and PRs carry no Claude trailer or session link. `keep` leaves Claude Code's default attribution. |
 
 Changing a variable does not rebuild the cached image, so the session-start
 hook compares each variable with the value `setup.sh` last ran with and
 re-runs it on a mismatch or a missing tool.
+
+Until the cached image is rebuilt (setup script or network settings edited,
+or after ~7 days), a feature added this way is installed again at the start
+of each new session, since sessions start from the cached image. That is a
+few seconds for Quarto and about 30 s for R; the session-start hook allows
+it 4 minutes.
 
 ## What the secret guard covers
 

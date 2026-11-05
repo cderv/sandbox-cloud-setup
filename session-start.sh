@@ -31,14 +31,26 @@ tools_ok() {
 # setup.sh last ran with, and what it asks for is installed. A variable added
 # or changed on the environment fails this, so the repair step installs it.
 features_ok() {
-  local q="${CLOUD_SETUP_QUARTO:-}"
+  local q="${CLOUD_SETUP_QUARTO:-}" r="${CLOUD_SETUP_R:-}" r_got
   [ "${CLOUD_SETUP_ATTRIBUTION:-}" = "$(sed -n 's/^attribution=//p' "$1" 2>/dev/null)" ] || return 1
   [ "$q" = "$(sed -n 's/^quarto=//p' "$1" 2>/dev/null)" ] || return 1
-  [ -z "$q" ] && return 0
+  [ "$r" = "$(sed -n 's/^r=//p' "$1" 2>/dev/null)" ] || return 1
   case "$q" in
-    release|prerelease) "$HOME/.local/bin/quarto" --version >/dev/null 2>&1 ;;
-    *) [ "$("$HOME/.local/bin/quarto" --version 2>/dev/null)" = "$q" ] ;;
+    "") ;;
+    release|prerelease) "$HOME/.local/bin/quarto" --version >/dev/null 2>&1 || return 1 ;;
+    *) [ "$("$HOME/.local/bin/quarto" --version 2>/dev/null)" = "$q" ] || return 1 ;;
   esac
+  # R: an exact x.y.z must match; release (or any rig alias) only needs an R.
+  [ -z "$r" ] && return 0
+  r_got="$(r_version)"
+  [ -n "$r_got" ] || return 1
+  [[ "$r" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 0
+  [ "$r_got" = "$r" ]
+}
+
+# r_version: version of the default R that rig linked in /usr/local/bin.
+r_version() {
+  /usr/local/bin/Rscript -e 'cat(format(getRversion()))' 2>/dev/null
 }
 
 main() {
@@ -97,13 +109,14 @@ main() {
     problems+=("braid ${braid_got:-missing}, expected $braid_want")
   fi
   command -v gh >/dev/null 2>&1 || problems+=("gh missing")
-  features_ok "$state" || problems+=("opt-in feature not installed as requested (CLOUD_SETUP_QUARTO=${CLOUD_SETUP_QUARTO:-unset})")
+  features_ok "$state" || problems+=("opt-in feature not installed as requested (CLOUD_SETUP_QUARTO=${CLOUD_SETUP_QUARTO:-unset}, CLOUD_SETUP_R=${CLOUD_SETUP_R:-unset})")
   [ -n "${BRAID_SYNC_URL:-}" ] || problems+=("BRAID_SYNC_URL unset - braid would use the PUBLIC relay")
 
   # --- 3. report
   if [ "${#problems[@]}" -eq 0 ]; then
     local extra=""
     [ -n "${CLOUD_SETUP_QUARTO:-}" ] && extra=", quarto $("$HOME/.local/bin/quarto" --version 2>/dev/null)"
+    [ -n "${CLOUD_SETUP_R:-}" ] && extra="$extra, R $(r_version)"
     echo "cloud-setup: up to date (rev ${have_rev:0:7}, ${braid_got:-braid ?}, gh ok${extra})"
   else
     msg="cloud-setup WARNING: $(IFS=';'; echo "${problems[*]}"). Tell the user; run cloud-doctor for details."

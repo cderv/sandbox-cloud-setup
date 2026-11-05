@@ -87,10 +87,12 @@ fi
 #     changed (a variable change alone does not rebuild the cached image).
 #
 #   CLOUD_SETUP_QUARTO      = release | prerelease | <exact version, e.g. 1.11.9>
+#   CLOUD_SETUP_R           = release | <exact version, e.g. 4.5.2> (via rig)
 #   CLOUD_SETUP_ATTRIBUTION = keep  (default: no Claude attribution in commits
 #                                    and PRs; applied with the hooks below)
 # ============================================================================
 QUARTO_WANT="${CLOUD_SETUP_QUARTO:-}"
+R_WANT="${CLOUD_SETUP_R:-}"
 
 # quarto_resolve <spec>: release/prerelease -> current version from quarto.org.
 quarto_resolve() {
@@ -129,6 +131,55 @@ if [ -n "$QUARTO_WANT" ]; then
     echo "quarto installed: $("$BIN_DIR/quarto" --version 2>/dev/null || echo '?')"
   else
     echo "quarto install skipped (non-fatal - check network access to github.com)"
+  fi
+fi
+
+# --- R via rig (https://github.com/r-lib/rig). rig is pinned like braid: bump
+#     deliberately. It installs into /usr/local (bin/rig), and `rig add` (admin
+#     mode, as root) installs Posit's R build for Ubuntu 24.04 into
+#     /opt/R/<version>, links R/Rscript in /usr/local/bin and sets up the
+#     Posit Package Manager binary repo (fast install.packages()) and pak.
+#     Project packages do NOT belong here: they go in the project (renv or
+#     DESCRIPTION).
+RIG_VER="0.11.1"
+RIG="/usr/local/bin/rig"
+
+# install_rig: GitHub release tarball (bin/, share/) unpacked into /usr/local.
+install_rig() {
+  local w rc
+  w="$(mktemp -d)"
+  curl -fsSL "https://github.com/r-lib/rig/releases/download/v${RIG_VER}/rig-linux-$(uname -m)-${RIG_VER}.tar.gz" -o "$w/rig.tgz" \
+    && tar -xzf "$w/rig.tgz" -C /usr/local
+  rc=$?
+  rm -rf "$w"
+  return $rc
+}
+
+# r_installed: version of the default R (rig's quick link), empty if none.
+r_installed() {
+  /usr/local/bin/Rscript -e 'cat(format(getRversion()))' 2>/dev/null
+}
+
+if [ -n "$R_WANT" ]; then
+  step "R ($R_WANT, rig v$RIG_VER)"
+  if "$RIG" --version 2>/dev/null | grep -q " $RIG_VER\$"; then
+    echo "rig already installed: $("$RIG" --version 2>/dev/null | head -1)"
+  elif install_rig; then
+    echo "rig installed: $("$RIG" --version 2>/dev/null | head -1)"
+  else
+    echo "rig install skipped (non-fatal - check network access to github.com)"
+  fi
+  # release -> current version (rig asks api.r-hub.io), x.y.z -> itself.
+  r_ver="$("$RIG" resolve "$R_WANT" 2>/dev/null | awk 'NR==1 {print $1}')"
+  r_got="$(r_installed)"
+  if [ -z "$r_ver" ]; then
+    echo "R: could not resolve '$R_WANT' with rig (kept: ${r_got:-none})"
+  elif [ "$r_got" = "$r_ver" ]; then
+    echo "R already installed: $r_got"
+  elif "$RIG" add "$r_ver" && "$RIG" default "$r_ver"; then
+    echo "R installed: $(r_installed || echo '?')"
+  else
+    echo "R install skipped (non-fatal - check network access to cdn.posit.co)"
   fi
 fi
 
@@ -200,6 +251,7 @@ mkdir -p "$HOME/.config/cloud-setup"
   echo "repo=${base_repo:-https://github.com/cderv/sandbox-cloud-setup}"
   echo "braid=$BRAID_VER"
   echo "quarto=$QUARTO_WANT"
+  echo "r=$R_WANT"
   echo "attribution=${CLOUD_SETUP_ATTRIBUTION:-}"
 } > "$HOME/.config/cloud-setup/state"
 

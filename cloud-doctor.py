@@ -61,6 +61,15 @@ def main():
         ok = got != "missing" and (q in ("release", "prerelease") or got == q)
         line(ok and state.get("quarto") == q, "quarto",
              f"{got} (CLOUD_SETUP_QUARTO={q}, setup ran with {state.get('quarto') or 'unset'})")
+    r = os.environ.get("CLOUD_SETUP_R", "")
+    if r:
+        p = subprocess.run(["/usr/local/bin/Rscript", "-e", "cat(format(getRversion()))"],
+                           capture_output=True, text=True) if os.path.exists("/usr/local/bin/Rscript") else None
+        got = p.stdout.strip() if p and p.returncode == 0 else "missing"
+        exact = all(x.isdigit() for x in r.split(".")) and r.count(".") == 2
+        ok = got != "missing" and (got == r or not exact)
+        line(ok and state.get("r") == r, "R (rig)",
+             f"{got} (CLOUD_SETUP_R={r}, setup ran with {state.get('r') or 'unset'})")
     try:
         attribution = json.load(open(SETTINGS)).get("attribution")
     except (OSError, ValueError):
