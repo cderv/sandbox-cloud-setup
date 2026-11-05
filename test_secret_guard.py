@@ -55,6 +55,19 @@ def main():
         if run({"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_response": clean}, env) is not None:
             fails.append(f"clean output was rewritten: {clean!r}")
 
+    # Extra names from CLOUD_SETUP_SECRET_VARS: denied when referenced, redacted when printed.
+    fake_key = "k3y" * 8
+    env2 = dict(env, CLOUD_SETUP_SECRET_VARS="MY_API_KEY, OTHER_ONE,not-a-name", MY_API_KEY=fake_key)
+    for cmd in ["echo $MY_API_KEY", "printenv MY_API_KEY", "echo ${OTHER_ONE}", "echo $BRAID_DOC_ID"]:
+        if not denied(cmd, env2):
+            fails.append(f"not denied with CLOUD_SETUP_SECRET_VARS: {cmd!r}")
+    if denied("echo $MY_API_KEY_SUFFIX_IS_ANOTHER_VAR", env2) or denied("echo $MY_API_KEY", env):
+        fails.append("CLOUD_SETUP_SECRET_VARS matched too much")
+    out = run({"hook_event_name": "PostToolUse", "tool_name": "Bash",
+               "tool_response": {"stdout": f"key={fake_key}", "stderr": ""}}, env2)
+    if not out or fake_key in out["hookSpecificOutput"]["updatedToolOutput"]:
+        fails.append("extra secret var value not redacted")
+
     print("\n".join(fails) or "all secret-guard checks passed")
     sys.exit(1 if fails else 0)
 

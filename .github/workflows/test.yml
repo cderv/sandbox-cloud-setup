@@ -18,12 +18,15 @@ jobs:
       - name: secret-guard tests
         run: python3 test_secret_guard.py
       - name: setup.sh in a scratch HOME
+        env:
+          CLOUD_SETUP_BRAID: "0.8.1"
         run: |
           HOME="$(mktemp -d)" bash setup.sh
           # hooks registered once, even when re-run
           HOME="$RUNNER_TEMP/h" bash -c 'bash setup.sh >/dev/null && bash setup.sh >/dev/null && python3 -c "import json,os; h=json.load(open(os.path.expanduser(\"~/.claude/settings.json\")))[\"hooks\"]; assert all(len(v)==1 for v in h.values()), h; print(\"hooks ok\")"'
       - name: session-start.sh (healthy start, then self-repair of a missing tool)
         env:
+          CLOUD_SETUP_BRAID: "0.8.1"
           CLOUD_SETUP_REPO: ${{ github.workspace }}
           CLOUD_SETUP_REF: ${{ github.sha }}
           BRAID_SYNC_URL: wss://example.invalid
@@ -34,6 +37,26 @@ jobs:
           out="$(bash session-start.sh)"; echo "$out"; [[ "$out" == "cloud-setup: up to date"* ]]
           unset BRAID_SYNC_URL
           bash session-start.sh | python3 -c "import json,sys; d=json.load(sys.stdin); assert 'BRAID_SYNC_URL' in d['systemMessage'], d; print('warning ok')"
+      - name: bootstrap options block (agent-browser, no braid), then a variable turning it off
+        env:
+          CLOUD_SETUP_REPO: ${{ github.workspace }}
+          CLOUD_SETUP_REF: ${{ github.sha }}
+        run: |
+          export HOME="$RUNNER_TEMP/ab" PATH="$RUNNER_TEMP/ab/.local/bin:$PATH"
+          mkdir -p "$HOME/.config/cloud-setup"
+          # what bootstrap.sh writes with CLOUD_SETUP_AGENT_BROWSER="latest" in its options block
+          printf 'CLOUD_SETUP_BRAID=\nCLOUD_SETUP_QUARTO=\nCLOUD_SETUP_AGENT_BROWSER=latest\nCLOUD_SETUP_ATTRIBUTION=keep\nCLOUD_SETUP_SECRET_VARS=MY_API_KEY\n' > "$HOME/.config/cloud-setup/defaults"
+          bash setup.sh
+          agent-browser --version
+          test -f "$HOME/.claude/skills/agent-browser/SKILL.md"
+          python3 -c "import json,os; c=json.load(open(os.path.expanduser('~/.agent-browser/config.json'))); assert os.access(c['executablePath'], os.X_OK), c; print('browser', c['executablePath'])"
+          python3 -c "import json,os; assert 'attribution' not in json.load(open(os.path.expanduser('~/.claude/settings.json'))); print('attribution kept')"
+          # braid off: no braid installed, no BRAID_SYNC_URL warning
+          test ! -e "$HOME/.local/bin/braid"
+          out="$(bash session-start.sh)"; echo "$out"; [[ "$out" == "cloud-setup: up to date"*"agent-browser"* ]]
+          out="$(CLOUD_SETUP_AGENT_BROWSER=off bash session-start.sh)"; echo "$out"; [[ "$out" != *"agent-browser"* ]]
+          grep -qx 'agent_browser=' "$HOME/.config/cloud-setup/state"
+          python3 cloud-doctor.py
   opt-in-r:
     # rig add installs a .deb with apt: needs root, like the claude.ai setup script.
     runs-on: ubuntu-24.04

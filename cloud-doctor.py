@@ -2,20 +2,51 @@
 """cloud-doctor: check this environment's setup WITHOUT printing any secret.
 
 Installed as ~/.local/bin/cloud-doctor by setup.sh. Safe to run from a Claude
-session: it reports only whether things are set / registered / working:
-hooks, installed commit, braid / gh, each opt-in feature requested by a
-CLOUD_SETUP_* variable (Quarto, R, uv, Python, attribution), GitHub access.
+session: it reports only whether things are set / registered / working.
 """
 import json
 import os
+import re
 import subprocess
 
 SETTINGS = os.path.expanduser("~/.claude/settings.json")
 STATE = os.path.expanduser("~/.config/cloud-setup/state")
+DEFAULTS = os.path.expanduser("~/.config/cloud-setup/defaults")
 
 
 def line(ok, label, detail=""):
     print(f"{'OK ' if ok else '!! '} {label}{': ' + detail if detail else ''}")
+
+
+def read_kv(path):
+    out = {}
+    try:
+        with open(path) as f:
+            for raw in f:
+                k, _, v = raw.strip().partition("=")
+                out[k] = v
+    except OSError:
+        pass
+    return out
+
+
+def opt(name, defaults):
+    """Wanted value of CLOUD_SETUP_<name>, same rule as setup.sh: the
+    environment variable when set, else the pasted bootstrap's options block.
+    Returns (value, where it came from)."""
+    key = f"CLOUD_SETUP_{name}"
+    if os.environ.get(key):
+        v, src = os.environ[key], "variable"
+    elif defaults.get(key):
+        v, src = defaults[key], "bootstrap"
+    else:
+        return "", "unset"
+    return ("" if v == "off" else v), src
+
+
+def version(cmd):
+    p = subprocess.run(["bash", "-c", f"{cmd} --version"], capture_output=True, text=True)
+    return p.stdout.strip() if p.returncode == 0 else "missing"
 
 
 def main():
@@ -38,32 +69,44 @@ def main():
         line(False, "secret-guard hooks registered", f"cannot read {SETTINGS}")
 
     # 1b. installed commit + expected tools (recorded by setup.sh)
-    state = {}
-    try:
-        with open(STATE) as f:
-            for raw in f:
-                k, _, v = raw.strip().partition("=")
-                state[k] = v
-    except OSError:
-        pass
+    state = read_kv(STATE)
+    defaults = read_kv(DEFAULTS)
+    if not state:
+        line(False, "setup state", f"{STATE} missing: this environment's setup script never "
+             "ran bootstrap.sh (e.g. the Default environment). Paste bootstrap.sh into the "
+             "environment's Setup script, then start a new session.")
     line(bool(state.get("rev")), "setup commit",
-         f"{state.get('rev', 'none')[:12]} (wanted ref: {os.environ.get('CLOUD_SETUP_REF', 'main')})")
-    p = subprocess.run(["bash", "-c", "braid --version"], capture_output=True, text=True)
-    got = p.stdout.strip() if p.returncode == 0 else "missing"
-    want = state.get("braid", "")
-    line(bool(want) and want in got, "braid", f"{got} (expected {want or '?'})")
+         f"{state.get('rev', 'none')[:12]} (wanted ref: "
+         f"{os.environ.get('CLOUD_SETUP_REF') or state.get('ref') or 'main'})")
+    line(bool(defaults), "bootstrap options block",
+         "present" if defaults else "none (pasted bootstrap predates it: options only via variables)")
     p = subprocess.run(["bash", "-c", "command -v gh"], capture_output=True, text=True)
     line(p.returncode == 0, "gh", p.stdout.strip() or "missing")
 
-    # 1c. opt-in features (CLOUD_SETUP_* variables on the environment)
-    q = os.environ.get("CLOUD_SETUP_QUARTO", "")
-    if q:
-        p = subprocess.run(["bash", "-c", "quarto --version"], capture_output=True, text=True)
-        got = p.stdout.strip() if p.returncode == 0 else "missing"
-        ok = got != "missing" and (q in ("release", "prerelease") or got == q)
-        line(ok and state.get("quarto") == q, "quarto",
-             f"{got} (CLOUD_SETUP_QUARTO={q}, setup ran with {state.get('quarto') or 'unset'})")
-    r = os.environ.get("CLOUD_SETUP_R", "")
+    # 1c. opt-in features (bootstrap options block, or CLOUD_SETUP_* variables)
+    moving = ("release", "prerelease", "latest")
+    for name, key, cmd in (("BRAID", "braid", "braid"),
+                           ("QUARTO", "quarto", "quarto"),
+                           ("AGENT_BROWSER", "agent_browser", "agent-browser")):
+        want, src = opt(name, defaults)
+        if name == "BRAID":
+            want = want.removeprefix("v")
+        if not want:
+            continue
+        got = version(cmd)
+        ok = got != "missing" and (want in moving or (got.split() or [""])[-1] == want)
+        line(ok and state.get(key) == want, cmd,
+             f"{got} (CLOUD_SETUP_{name}={want} from {src}, setup ran with {state.get(key) or 'unset'})")
+    if opt("AGENT_BROWSER", defaults)[0]:
+        try:
+            exe = json.load(open(os.path.expanduser("~/.agent-browser/config.json"))).get("executablePath")
+        except (OSError, ValueError):
+            exe = None
+        line(bool(exe) and os.access(exe, os.X_OK), "agent-browser browser",
+             f"{exe} (~/.agent-browser/config.json)" if exe else "no executablePath in ~/.agent-browser/config.json")
+        skill = os.path.expanduser("~/.claude/skills/agent-browser/SKILL.md")
+        line(os.path.isfile(skill), "agent-browser skill", skill if os.path.isfile(skill) else "missing")
+    r, src = opt("R", defaults)
     if r:
         p = subprocess.run(["/usr/local/bin/Rscript", "-e", "cat(format(getRversion()))"],
                            capture_output=True, text=True) if os.path.exists("/usr/local/bin/Rscript") else None
@@ -71,31 +114,33 @@ def main():
         exact = all(x.isdigit() for x in r.split(".")) and r.count(".") == 2
         ok = got != "missing" and (got == r or not exact)
         line(ok and state.get("r") == r, "R (rig)",
-             f"{got} (CLOUD_SETUP_R={r}, setup ran with {state.get('r') or 'unset'})")
+             f"{got} (CLOUD_SETUP_R={r} from {src}, setup ran with {state.get('r') or 'unset'})"
+             + ("" if ok else " - R needs Custom network access: api.r-hub.io, cdn.posit.co, ..."))
     uv = os.path.expanduser("~/.local/bin/uv")
     uv = uv if os.path.exists(uv) else "uv"
-    u = os.environ.get("CLOUD_SETUP_UV", "")
+    u, src = opt("UV", defaults)
     if u:
         p = subprocess.run(["bash", "-c", f"'{uv}' --version"], capture_output=True, text=True)
         got = p.stdout.split()[1] if p.returncode == 0 and len(p.stdout.split()) > 1 else "missing"
         ok = got != "missing" and (u == "latest" or got == u)
         line(ok and state.get("uv") == u, "uv",
-             f"{got} (CLOUD_SETUP_UV={u}, setup ran with {state.get('uv') or 'unset'})")
-    py = os.environ.get("CLOUD_SETUP_PYTHON", "")
+             f"{got} (CLOUD_SETUP_UV={u} from {src}, setup ran with {state.get('uv') or 'unset'})")
+    py, src = opt("PYTHON", defaults)
     if py:
         missing = [v for v in py.replace(",", " ").split()
                    if subprocess.run(["bash", "-c", f"'{uv}' python find --managed-python '{v}'"],
                                      capture_output=True).returncode != 0]
         line(not missing and state.get("python") == py, "python (uv-managed)",
              (f"missing {' '.join(missing)}" if missing else "all found")
-             + f" (CLOUD_SETUP_PYTHON={py}, setup ran with {state.get('python') or 'unset'})")
+             + f" (CLOUD_SETUP_PYTHON={py} from {src}, setup ran with {state.get('python') or 'unset'})")
     try:
         attribution = json.load(open(SETTINGS)).get("attribution")
     except (OSError, ValueError):
         attribution = None
-    keep = os.environ.get("CLOUD_SETUP_ATTRIBUTION") == "keep"
-    line(keep or attribution == {"commit": "", "pr": ""}, "commit/PR attribution",
-         "kept (CLOUD_SETUP_ATTRIBUTION=keep)" if keep else f"settings: {attribution}")
+    keep, src = opt("ATTRIBUTION", defaults)
+    keep = keep == "keep"
+    line(keep or attribution == {"commit": "", "pr": "", "sessionUrl": False}, "commit/PR attribution",
+         f"kept (CLOUD_SETUP_ATTRIBUTION=keep from {src})" if keep else f"settings: {attribution}")
 
     # 2. GitHub: no personal token in the environment, handled by the proxy
     for v in ("GH_TOKEN", "GITHUB_TOKEN"):
@@ -112,9 +157,14 @@ def main():
          f"authenticated as {p.stdout.strip()}" if p.returncode == 0
          else ((p.stderr.strip().splitlines() or ["failed"])[-1]))
 
-    # 3. other environment variables the setup expects (names only)
-    for v in ("BRAID_SYNC_URL", "BRAID_DOC_ID"):
-        line(bool(os.environ.get(v)), v, "set" if os.environ.get(v) else "unset")
+    # 3. variables the setup expects (names only, never values)
+    if opt("BRAID", defaults)[0]:
+        for v in ("BRAID_SYNC_URL", "BRAID_DOC_ID"):
+            line(bool(os.environ.get(v)), v, "set" if os.environ.get(v) else "unset")
+    names, src = opt("SECRET_VARS", defaults)
+    for v in filter(None, re.split(r"[\s,]+", names)):
+        line(True, f"secret-guard protects {v}",
+             ("set" if os.environ.get(v) else "unset") + f" (from {src})")
 
 
 if __name__ == "__main__":

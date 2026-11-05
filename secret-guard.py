@@ -22,8 +22,28 @@ import os
 import re
 import sys
 
-# Environment variables whose values must never reach the transcript.
-SECRET_VARS = ("BRAID_DOC_ID",)
+DEFAULTS = os.path.expanduser("~/.config/cloud-setup/defaults")
+
+
+def extra_secret_vars():
+    """Variable NAMES listed in CLOUD_SETUP_SECRET_VARS (comma/space separated):
+    the environment variable when set, else the bootstrap's options block.
+    Names only; invalid entries are ignored."""
+    raw = os.environ.get("CLOUD_SETUP_SECRET_VARS", "")
+    if not raw:
+        try:
+            with open(DEFAULTS) as f:
+                for line in f:
+                    if line.startswith("CLOUD_SETUP_SECRET_VARS="):
+                        raw = line.split("=", 1)[1].strip()
+        except OSError:
+            pass
+    return tuple(n for n in re.split(r"[\s,]+", raw) if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", n))
+
+
+# Environment variables whose values must never reach the transcript:
+# BRAID_DOC_ID (braid's bearer secret, see CLOUD_SETUP_BRAID) plus your own.
+SECRET_VARS = tuple(dict.fromkeys(("BRAID_DOC_ID",) + extra_secret_vars()))
 
 # GitHub token formats: classic/OAuth/user/server/refresh + fine-grained PATs.
 TOKEN_RE = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b")
@@ -39,7 +59,9 @@ DENY_BASH = [
     (r"\bprintenv\s+\w*(?:TOKEN|SECRET|DOC_ID|PASSWORD|KEY)\b",
      "printing a secret environment variable"),
     (r"\$\{?!?(?:" + "|".join(SECRET_VARS) + r")\b",
-     "referencing a secret variable in a command; use the tool that needs it (braid) instead"),
+     "referencing a secret variable in a command; use the tool that needs it instead"),
+    (r"\bprintenv\s+(?:" + "|".join(SECRET_VARS) + r")\b",
+     "printing a secret environment variable"),
     (r"/proc/[^\s]*/environ", "reading a process environment would print secrets"),
     (r"\bgh\s+auth\s+(?:token|git-credential|status\b.*(?:-t\b|--show-token))", "prints the GitHub token"),
     (r"\bgit\s+credential\s+fill\b|\bgit\s+credential-\w+\s+get\b", "prints stored git credentials"),
