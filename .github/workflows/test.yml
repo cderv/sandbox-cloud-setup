@@ -34,3 +34,18 @@ jobs:
           out="$(bash session-start.sh)"; echo "$out"; [[ "$out" == "cloud-setup: up to date"* ]]
           unset BRAID_SYNC_URL
           bash session-start.sh | python3 -c "import json,sys; d=json.load(sys.stdin); assert 'BRAID_SYNC_URL' in d['systemMessage'], d; print('warning ok')"
+  opt-in-r:
+    # rig add installs a .deb with apt: needs root, like the claude.ai setup script.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup.sh with CLOUD_SETUP_R=release (then idempotent re-run)
+        run: |
+          h="$RUNNER_TEMP/r"
+          sudo env HOME="$h" CLOUD_SETUP_R=release bash setup.sh | tee "$RUNNER_TEMP/1.log"
+          grep -q '^R installed: [0-9]' "$RUNNER_TEMP/1.log"
+          /usr/local/bin/R --version | head -1
+          sudo grep -qx 'r=release' "$h/.config/cloud-setup/state"
+          sudo env HOME="$h" CLOUD_SETUP_R=release bash setup.sh | tee "$RUNNER_TEMP/2.log"
+          grep -q '^R already installed: ' "$RUNNER_TEMP/2.log"
+          /usr/local/bin/Rscript -e 'stopifnot(grepl("packagemanager.posit.co", getOption("repos")[["P3M"]]))'
