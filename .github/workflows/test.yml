@@ -49,3 +49,23 @@ jobs:
           sudo env HOME="$h" CLOUD_SETUP_R=release bash setup.sh | tee "$RUNNER_TEMP/2.log"
           grep -q '^R already installed: ' "$RUNNER_TEMP/2.log"
           /usr/local/bin/Rscript -e 'stopifnot(grepl("packagemanager.posit.co", getOption("repos")[["P3M"]]))'
+  opt-in-uv:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup.sh with CLOUD_SETUP_UV=latest, CLOUD_SETUP_PYTHON (then idempotent re-run)
+        env:
+          CLOUD_SETUP_UV: latest
+          CLOUD_SETUP_PYTHON: "3.12 3.14"
+        run: |
+          export HOME="$RUNNER_TEMP/u"
+          bash setup.sh 2>&1 | tee "$RUNNER_TEMP/1.log"
+          grep -q '^uv installed: [0-9]' "$RUNNER_TEMP/1.log"
+          "$HOME/.local/bin/uv" --version
+          "$HOME/.local/bin/python3.12" --version
+          "$HOME/.local/bin/python3.14" --version
+          # never --default: no python/python3 shadowing the system one
+          [ ! -e "$HOME/.local/bin/python3" ] && [ ! -e "$HOME/.local/bin/python" ]
+          grep -qx 'python=3.12 3.14' "$HOME/.config/cloud-setup/state"
+          bash setup.sh 2>&1 | tee "$RUNNER_TEMP/2.log"
+          grep -q '^uv already installed: ' "$RUNNER_TEMP/2.log"
