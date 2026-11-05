@@ -39,7 +39,8 @@
   agent-browser turned off by a variable,
 - `opt-in-r` (as root, like the setup script), `opt-in-uv` and
   `opt-in-just`: install R, uv and two Python versions, just, then check
-  that a second run changes nothing.
+  that a second run changes nothing. `opt-in-just` also checks just's skill
+  and the justfile line in Claude's context.
 
 Locally:
 
