@@ -70,6 +70,23 @@ def main():
         ok = got != "missing" and (got == r or not exact)
         line(ok and state.get("r") == r, "R (rig)",
              f"{got} (CLOUD_SETUP_R={r}, setup ran with {state.get('r') or 'unset'})")
+    uv = os.path.expanduser("~/.local/bin/uv")
+    uv = uv if os.path.exists(uv) else "uv"
+    u = os.environ.get("CLOUD_SETUP_UV", "")
+    if u:
+        p = subprocess.run(["bash", "-c", f"'{uv}' --version"], capture_output=True, text=True)
+        got = p.stdout.split()[1] if p.returncode == 0 and len(p.stdout.split()) > 1 else "missing"
+        ok = got != "missing" and (u == "latest" or got == u)
+        line(ok and state.get("uv") == u, "uv",
+             f"{got} (CLOUD_SETUP_UV={u}, setup ran with {state.get('uv') or 'unset'})")
+    py = os.environ.get("CLOUD_SETUP_PYTHON", "")
+    if py:
+        missing = [v for v in py.replace(",", " ").split()
+                   if subprocess.run(["bash", "-c", f"'{uv}' python find --managed-python '{v}'"],
+                                     capture_output=True).returncode != 0]
+        line(not missing and state.get("python") == py, "python (uv-managed)",
+             (f"missing {' '.join(missing)}" if missing else "all found")
+             + f" (CLOUD_SETUP_PYTHON={py}, setup ran with {state.get('python') or 'unset'})")
     try:
         attribution = json.load(open(SETTINGS)).get("attribution")
     except (OSError, ValueError):
