@@ -50,17 +50,20 @@ version_ok() {
 # last ran with, and what it asks for is installed. An option added or
 # changed on the environment fails this, so the repair step installs it.
 features_ok() {
-  local b q ab r r_got
+  local b q ab j r r_got
   b="$(opt BRAID)"; b="${b#v}"; q="$(opt QUARTO)"; ab="$(opt AGENT_BROWSER)"; r="$(opt R)"
+  j="$(opt JUST)"
   [ "$(opt ATTRIBUTION)" = "$(sed -n 's/^attribution=//p' "$1" 2>/dev/null)" ] || return 1
   [ "$b" = "$(sed -n 's/^braid=//p' "$1" 2>/dev/null)" ] || return 1
   [ "$q" = "$(sed -n 's/^quarto=//p' "$1" 2>/dev/null)" ] || return 1
   [ "$ab" = "$(sed -n 's/^agent_browser=//p' "$1" 2>/dev/null)" ] || return 1
+  [ "$j" = "$(sed -n 's/^just=//p' "$1" 2>/dev/null)" ] || return 1
   [ "$r" = "$(sed -n 's/^r=//p' "$1" 2>/dev/null)" ] || return 1
   uv_ok "$1" && python_ok "$1" || return 1
   { [ -z "$b" ] || version_ok "$b" "$HOME/.local/bin/braid"; } \
     && { [ -z "$q" ] || version_ok "$q" "$HOME/.local/bin/quarto"; } \
     && { [ -z "$ab" ] || version_ok "$ab" "$HOME/.local/bin/agent-browser"; } \
+    && { [ -z "$j" ] || version_ok "$j" "$HOME/.local/bin/just"; } \
     || return 1
   # R: an exact x.y.z must match; release (or any rig alias) only needs an R.
   [ -z "$r" ] && return 0
@@ -155,7 +158,7 @@ main() {
   have_rev="$(sed -n 's/^rev=//p' "$state" 2>/dev/null)"
   [ -n "$have_rev" ] || problems+=("no setup state in $state - setup.sh never completed")
   command -v gh >/dev/null 2>&1 || problems+=("gh missing")
-  features_ok "$state" || problems+=("opt-in feature not installed as requested (braid=$(opt BRAID), quarto=$(opt QUARTO), R=$(opt R), uv=$(opt UV), python=$(opt PYTHON), agent-browser=$(opt AGENT_BROWSER))")
+  features_ok "$state" || problems+=("opt-in feature not installed as requested (braid=$(opt BRAID), quarto=$(opt QUARTO), R=$(opt R), uv=$(opt UV), python=$(opt PYTHON), agent-browser=$(opt AGENT_BROWSER), just=$(opt JUST))")
   if [ -n "$(opt BRAID)" ] && [ -z "${BRAID_SYNC_URL:-}" ]; then
     problems+=("BRAID_SYNC_URL unset - braid would use the PUBLIC relay")
   fi
@@ -176,6 +179,7 @@ main() {
     [ -n "$(opt UV)" ] && extra+=", uv $("$(uv_bin)" --version 2>/dev/null | awk '{print $2}')"
     [ -n "$(opt PYTHON)" ] && extra+=", python $(p="$(opt PYTHON)"; echo "${p//,/ }")"
     [ -n "$(opt AGENT_BROWSER)" ] && extra+=", $("$HOME/.local/bin/agent-browser" --version 2>/dev/null)"
+    [ -n "$(opt JUST)" ] && extra+=", $("$HOME/.local/bin/just" --version 2>/dev/null)"
     echo "cloud-setup: up to date (rev ${have_rev:0:7}, gh ok${extra})"
   else
     msg="cloud-setup WARNING: $(IFS=';'; echo "${problems[*]}"). Tell the user; run cloud-doctor for details."

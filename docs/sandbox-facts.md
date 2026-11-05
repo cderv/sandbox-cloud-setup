@@ -39,7 +39,7 @@ or [Use Claude Code in the cloud](https://code.claude.com/docs/en/claude-code-on
 | All outbound traffic goes through an HTTPS proxy that re-signs TLS. Its CA bundle is `/root/.ccr/ca-bundle.crt`; `curl -sS "$HTTPS_PROXY/__agentproxy/status"` shows its state. | Seen 2026-11-04 |
 | Chromium trusts the proxy because the platform puts its CA in `/root/.pki/nssdb` at session start. | Seen 2026-11-04 |
 | Package registries (`registry.npmjs.org`, `pypi.org`, ...) are in `NO_PROXY`. | Seen 2026-11-04 |
-| Under **Trusted**, hosts outside the allowlist are refused by the proxy (403 on CONNECT): `example.com`, `agent-browser.dev`, `googlechromelabs.github.io`, `quarto.org`, and every host R needs (`api.r-hub.io`, `cdn.posit.co`, `r-lib.github.io`, `packagemanager.posit.co`, `cloud.r-project.org`) were. `github.com` (git and release downloads, but not HTML pages such as `/releases/latest`, which get a 403) and `raw.githubusercontent.com` are reachable. | Seen 2026-11-04 |
+| Under **Trusted**, hosts outside the allowlist are refused by the proxy (403 on CONNECT): `example.com`, `agent-browser.dev`, `googlechromelabs.github.io`, `quarto.org`, `just.systems` (seen 2026-11-05), and every host R needs (`api.r-hub.io`, `cdn.posit.co`, `r-lib.github.io`, `packagemanager.posit.co`, `cloud.r-project.org`) were. `github.com` (git and release downloads, but not HTML pages such as `/releases/latest`, which get a 403) and `raw.githubusercontent.com` are reachable. | Seen 2026-11-04 |
 | GitHub goes through a separate GitHub proxy: API calls only for attached repositories, no GraphQL, no tag pushes. See [GitHub](github.md). | Docs |
 
 ## Environments and sessions

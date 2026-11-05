@@ -9,7 +9,7 @@
      ├─ fetches REPO at PIN into /opt/sandbox-cloud-setup (public, no token)
      └─ runs setup.sh
           ├─ gh (only if missing) → ~/.local/bin/gh
-          ├─ options              → braid, quarto, R (rig), uv, python, agent-browser (+ skill), attribution
+          ├─ options              → braid, quarto, R (rig), uv, python, just, agent-browser (+ skill), attribution
           ├─ secret-guard.py + session-start.sh → ~/.claude/hooks/, registered in ~/.claude/settings.json
           └─ ~/.config/cloud-setup/state  (rev=, ref=, repo=, braid=, and each option's value)
 
@@ -92,7 +92,7 @@ self-update: pin a commit that contains it.
 | `~/.config/cloud-setup/state` | `setup.sh` | `rev=`, `ref=`, `repo=`, `braid=`, and each option's value it ran with. |
 | `~/.claude/hooks/secret-guard.py`, `~/.claude/hooks/cloud-setup-session-start.sh` | `setup.sh` | The hooks. |
 | `~/.claude/settings.json` | `setup.sh` | Hook registration (merged, idempotent) and `attribution`. Other keys are kept. |
-| `~/.local/bin/{gh,braid,quarto,agent-browser,cloud-doctor}` | `setup.sh` | Tools (`gh` only if the image lacks it). |
+| `~/.local/bin/{gh,braid,quarto,just,agent-browser,cloud-doctor}` | `setup.sh` | Tools (`gh` only if the image lacks it). |
 | `/opt/quarto/<version>/`, `/opt/agent-browser/<version>/`, `/opt/R/<version>/` (+ `/usr/local/bin/{rig,R,Rscript}`), `~/.local/share/uv/python/` | `setup.sh` | Opt-in installs. |
 | `~/.agent-browser/config.json`, `~/.claude/skills/agent-browser/` | `setup.sh` | agent-browser browser path and skill. |
 

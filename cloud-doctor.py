@@ -87,7 +87,8 @@ def main():
     moving = ("release", "prerelease", "latest")
     for name, key, cmd in (("BRAID", "braid", "braid"),
                            ("QUARTO", "quarto", "quarto"),
-                           ("AGENT_BROWSER", "agent_browser", "agent-browser")):
+                           ("AGENT_BROWSER", "agent_browser", "agent-browser"),
+                           ("JUST", "just", "just")):
         want, src = opt(name, defaults)
         if name == "BRAID":
             want = want.removeprefix("v")

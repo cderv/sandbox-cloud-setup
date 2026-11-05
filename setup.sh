@@ -90,6 +90,7 @@ step "extra tools"
 #   CLOUD_SETUP_UV            = latest | <exact version, e.g. 0.13.7>
 #   CLOUD_SETUP_PYTHON        = <versions, e.g. "3.12 3.14"> (uv-managed)
 #   CLOUD_SETUP_AGENT_BROWSER = latest | <exact version, e.g. 0.41.2>
+#   CLOUD_SETUP_JUST          = latest | <exact version, e.g. 1.59.0>
 #   CLOUD_SETUP_ATTRIBUTION   = keep  (default: no Claude attribution in commits
 #                                      and PRs; applied with the hooks below)
 # ============================================================================
@@ -99,6 +100,7 @@ R_WANT="$(opt R)"
 UV_OPT="$(opt UV)"; UV_WANT="$UV_OPT"
 PYTHON_WANT="$(opt PYTHON)"
 AB_WANT="$(opt AGENT_BROWSER)"
+JUST_WANT="$(opt JUST)"
 ATTRIBUTION="$(opt ATTRIBUTION)"
 
 # --- braid (automerge sync client): the official signed + sha256-verified
@@ -360,6 +362,53 @@ if [ -n "$PYTHON_WANT" ]; then
   fi
 fi
 
+# --- just (https://github.com/casey/just), the command runner: static musl
+#     binary from the GitHub release into $BIN_DIR, checked against the
+#     release's SHA256SUMS. just.systems (its install script) is not on the
+#     Trusted allowlist, github.com is.
+# just_version: "1.59.0", empty if missing.
+just_version() { "$BIN_DIR/just" --version 2>/dev/null | awk '{print $2}'; }
+
+# just_resolve <spec>: latest -> newest stable tag (git, like gh above).
+just_resolve() {
+  case "$1" in
+    latest) git ls-remote --tags --refs https://github.com/casey/just \
+              | sed 's#.*refs/tags/##' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sort -V | tail -1 ;;
+    *) echo "$1" ;;
+  esac
+}
+
+# install_just <version>: release tarball, checksum-verified, just into $BIN_DIR.
+install_just() {
+  local ver="$1" f w rc
+  f="just-${ver}-$(uname -m)-unknown-linux-musl.tar.gz"
+  w="$(mktemp -d)"
+  curl -fsSL "https://github.com/casey/just/releases/download/${ver}/${f}" -o "$w/$f" \
+    && curl -fsSL "https://github.com/casey/just/releases/download/${ver}/SHA256SUMS" -o "$w/SHA256SUMS" \
+    && (cd "$w" && grep " ${f}\$" SHA256SUMS | sha256sum -c --quiet -) \
+    && tar -xzf "$w/$f" -C "$w" just \
+    && install -m755 "$w/just" "$BIN_DIR/just"
+  rc=$?
+  rm -rf "$w"
+  return $rc
+}
+
+if [ -n "$JUST_WANT" ]; then
+  step "just ($JUST_WANT)"
+  just_ver="$(just_resolve "$JUST_WANT" 2>/dev/null)"
+  just_got="$(just_version)"
+  if [ -z "$just_ver" ]; then
+    echo "just: could not resolve '$JUST_WANT' (kept: ${just_got:-none})"
+  elif [ "$just_got" = "$just_ver" ]; then
+    echo "just already installed: $just_got"
+  elif install_just "$just_ver"; then
+    echo "just installed: $(just_version || echo '?')"
+  else
+    echo "just install skipped (non-fatal - check the version and network access to github.com)"
+  fi
+fi
+
 # ============================================================================
 # --- Secret guard: keep secrets set on the environment (the variables named
 #   in CLOUD_SETUP_SECRET_VARS, BRAID_DOC_ID) out of Claude's context.
@@ -437,6 +486,7 @@ mkdir -p "$HOME/.config/cloud-setup"
   echo "uv=$UV_OPT"
   echo "python=$PYTHON_WANT"
   echo "agent_browser=$AB_WANT"
+  echo "just=$JUST_WANT"
   echo "attribution=$ATTRIBUTION"
 } > "$HOME/.config/cloud-setup/state"
 

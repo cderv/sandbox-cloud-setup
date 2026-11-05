@@ -49,6 +49,7 @@ session title → **Edit cloud environment**.)
 | had the variables `CLOUD_SETUP_R`, `CLOUD_SETUP_UV`, `CLOUD_SETUP_PYTHON` | the same values in the block (R also needs Custom network access) |
 | had the variable `CLOUD_SETUP_ATTRIBUTION=keep` | `CLOUD_SETUP_ATTRIBUTION="keep"` |
 | should have agent-browser | `CLOUD_SETUP_AGENT_BROWSER="latest"` |
+| should have just | `CLOUD_SETUP_JUST="latest"` |
 | has other secret variables than `BRAID_DOC_ID` | `CLOUD_SETUP_SECRET_VARS="NAME1,NAME2"` (names only) |
 | was pinned with `PIN="<sha>"` | `PIN="<new full SHA>"` (see step 4) |
 | uses a fork | `REPO="<your fork's URL>"` |
@@ -58,8 +59,8 @@ Leave the rest as is.
 **3. Environment variables: remove what moved to the block.**
 
 - Delete `CLOUD_SETUP_QUARTO`, `CLOUD_SETUP_R`, `CLOUD_SETUP_UV`,
-  `CLOUD_SETUP_PYTHON`, `CLOUD_SETUP_ATTRIBUTION`, `CLOUD_SETUP_AGENT_BROWSER`
-  (now in the block). Keeping them is harmless
+  `CLOUD_SETUP_PYTHON`, `CLOUD_SETUP_ATTRIBUTION`, `CLOUD_SETUP_AGENT_BROWSER`,
+  `CLOUD_SETUP_JUST` (now in the block). Keeping them is harmless
   (a variable wins over the block) but installs them at every session.
 - Keep `BRAID_SYNC_URL` and `BRAID_DOC_ID` if the environment uses braid.
 - Delete `GH_TOKEN` / `GITHUB_TOKEN` if present ([why](github.md)).
@@ -79,7 +80,7 @@ so it takes a few minutes.
 
 - Claude's context starts with `cloud-setup: up to date (rev ..., gh ok, ...)`,
   listing the tools you turned on (`braid 0.8.1`, `quarto ...`,
-  `agent-browser ...`). A `cloud-setup WARNING` says what is wrong.
+  `agent-browser ...`, `just ...`). A `cloud-setup WARNING` says what is wrong.
 - Ask Claude to run `cloud-doctor`: every line `OK`, and each option shows
   `from bootstrap`.
 

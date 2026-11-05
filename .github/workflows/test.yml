@@ -92,3 +92,18 @@ jobs:
           grep -qx 'python=3.12 3.14' "$HOME/.config/cloud-setup/state"
           bash setup.sh 2>&1 | tee "$RUNNER_TEMP/2.log"
           grep -q '^uv already installed: ' "$RUNNER_TEMP/2.log"
+  opt-in-just:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup.sh with CLOUD_SETUP_JUST=latest (then idempotent re-run)
+        env:
+          CLOUD_SETUP_JUST: latest
+        run: |
+          export HOME="$RUNNER_TEMP/j"
+          bash setup.sh 2>&1 | tee "$RUNNER_TEMP/1.log"
+          grep -q '^just installed: [0-9]' "$RUNNER_TEMP/1.log"
+          "$HOME/.local/bin/just" --version
+          grep -qx 'just=latest' "$HOME/.config/cloud-setup/state"
+          bash setup.sh 2>&1 | tee "$RUNNER_TEMP/2.log"
+          grep -q '^just already installed: ' "$RUNNER_TEMP/2.log"

@@ -18,6 +18,7 @@ CLOUD_SETUP_R=""               # release | exact version (4.5.2); needs Custom n
 CLOUD_SETUP_UV=""              # latest | exact version (0.13.7)
 CLOUD_SETUP_PYTHON=""          # versions via uv, e.g. "3.12 3.14"
 CLOUD_SETUP_AGENT_BROWSER=""   # latest | exact version (0.41.2)
+CLOUD_SETUP_JUST=""            # latest | exact version (1.59.0)
 CLOUD_SETUP_ATTRIBUTION=""     # keep = keep Claude's commit/PR attribution
 CLOUD_SETUP_SECRET_VARS=""     # extra variable NAMES the secret guard protects,
                                # comma-separated (names only, never values)
@@ -45,6 +46,7 @@ mkdir -p "$HOME/.config/cloud-setup"
   echo "CLOUD_SETUP_UV=$CLOUD_SETUP_UV"
   echo "CLOUD_SETUP_PYTHON=$CLOUD_SETUP_PYTHON"
   echo "CLOUD_SETUP_AGENT_BROWSER=$CLOUD_SETUP_AGENT_BROWSER"
+  echo "CLOUD_SETUP_JUST=$CLOUD_SETUP_JUST"
   echo "CLOUD_SETUP_ATTRIBUTION=$CLOUD_SETUP_ATTRIBUTION"
   echo "CLOUD_SETUP_SECRET_VARS=$CLOUD_SETUP_SECRET_VARS"
   echo "CLOUD_SETUP_REPO=$REPO"

@@ -37,8 +37,9 @@
 - the options block with braid off: agent-browser installed from
   `defaults`, attribution kept, no braid and no braid warning, then
   agent-browser turned off by a variable,
-- `opt-in-r` (as root, like the setup script) and `opt-in-uv`: install R,
-  uv and two Python versions, then check that a second run changes nothing.
+- `opt-in-r` (as root, like the setup script), `opt-in-uv` and
+  `opt-in-just`: install R, uv and two Python versions, just, then check
+  that a second run changes nothing.
 
 Locally:
 

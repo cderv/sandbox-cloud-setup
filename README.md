@@ -7,7 +7,8 @@ gets:
 
 - **`gh`**, if the image lacks it,
 - **opt-in features** chosen per environment: [braid](https://github.com/cscheid/braid),
-  Quarto, R (via rig), uv and Python, [agent-browser](docs/agent-browser.md),
+  Quarto, R (via rig), uv and Python, [just](https://github.com/casey/just),
+  [agent-browser](docs/agent-browser.md),
   commit/PR attribution on or off,
   extra secret variable names to protect,
 - **a secret guard** hook that keeps environment secrets out of Claude's context,
@@ -35,6 +36,7 @@ that ([details](docs/environments.md)).
    CLOUD_SETUP_UV=""                   # latest | 0.13.7
    CLOUD_SETUP_PYTHON=""               # "3.12 3.14" (via uv)
    CLOUD_SETUP_AGENT_BROWSER="latest"  # latest | 0.41.2
+   CLOUD_SETUP_JUST=""                 # latest | 1.59.0
    CLOUD_SETUP_ATTRIBUTION=""          # keep = keep Claude's commit/PR trailers
    CLOUD_SETUP_SECRET_VARS=""          # MY_API_KEY,OTHER_TOKEN (names only)
    REPO="https://github.com/cderv/sandbox-cloud-setup"   # your fork's URL, if any
