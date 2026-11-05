@@ -21,6 +21,7 @@ step (e.g. the checklist `claude --cloud` prints).
 | `GH_TOKEN is set on the environment` warning | Remove it: the GitHub proxy authenticates `gh`, and the token is readable by anyone using the environment ([GitHub](github.md)). |
 | `gh pr view` / `gh issue list` fail with 403 | GraphQL is refused by the GitHub proxy. Use `gh api repos/OWNER/REPO/...`. |
 | `GitHub access to ... is not enabled for this session` | The repository is not attached to the session. Attach it (ask Claude) or start the session with it. |
+| No `justfile:` line in Claude's context at session start | The line needs `just` on the machine (`CLOUD_SETUP_JUST`) and a `justfile`, `Justfile` or `.justfile` at the project root. It is left out when `just --summary` fails or takes more than 5 s, or the justfile has no public recipe; above 20 recipes it gives only their count. Run `just --summary` in the project to see why ([justfile notes](options.md#justfile-notes)). |
 | agent-browser: `net::ERR_TUNNEL_CONNECTION_FAILED` | The site is not allowed by the network level. Add it under **Custom** network access ([agent-browser](agent-browser.md#browser-and-network)). |
 | agent-browser: `ERR_CERT_AUTHORITY_INVALID` | Run with the normal `HOME` (`/root`): the proxy CA is in `/root/.pki/nssdb`. |
 | A command is blocked by secret-guard | It would print a secret, or part of it matched. Split the command; never print the secret itself ([secret guard](secret-guard.md)). |
