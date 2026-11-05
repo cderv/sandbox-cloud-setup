@@ -88,11 +88,15 @@ fi
 #
 #   CLOUD_SETUP_QUARTO      = release | prerelease | <exact version, e.g. 1.11.9>
 #   CLOUD_SETUP_R           = release | <exact version, e.g. 4.5.2> (via rig)
+#   CLOUD_SETUP_UV          = latest | <exact version, e.g. 0.13.7>
+#   CLOUD_SETUP_PYTHON      = <versions, e.g. "3.12 3.14"> (uv-managed)
 #   CLOUD_SETUP_ATTRIBUTION = keep  (default: no Claude attribution in commits
 #                                    and PRs; applied with the hooks below)
 # ============================================================================
 QUARTO_WANT="${CLOUD_SETUP_QUARTO:-}"
 R_WANT="${CLOUD_SETUP_R:-}"
+UV_WANT="${CLOUD_SETUP_UV:-}"
+PYTHON_WANT="${CLOUD_SETUP_PYTHON:-}"
 
 # quarto_resolve <spec>: release/prerelease -> current version from quarto.org.
 quarto_resolve() {
@@ -183,6 +187,70 @@ if [ -n "$R_WANT" ]; then
   fi
 fi
 
+# --- uv (https://github.com/astral-sh/uv): the image may already ship one in
+#     ~/.local/bin; CLOUD_SETUP_UV pins or upgrades it from the GitHub release
+#     (same place, so it replaces the image's copy).
+# uv_version <uv>: "0.13.7", empty if missing.
+uv_version() { "$1" --version 2>/dev/null | awk '{print $2}'; }
+
+# uv_resolve <spec>: latest -> newest stable tag (git, like gh above).
+uv_resolve() {
+  case "$1" in
+    latest) git ls-remote --tags --refs https://github.com/astral-sh/uv \
+              | sed 's#.*refs/tags/##' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sort -V | tail -1 ;;
+    *) echo "$1" ;;
+  esac
+}
+
+# install_uv <version>: release tarball, uv + uvx into $BIN_DIR.
+install_uv() {
+  local ver="$1" t w rc
+  t="uv-$(uname -m)-unknown-linux-gnu"
+  w="$(mktemp -d)"
+  curl -fsSL "https://github.com/astral-sh/uv/releases/download/${ver}/${t}.tar.gz" -o "$w/uv.tgz" \
+    && tar -xzf "$w/uv.tgz" -C "$w" \
+    && install -m755 "$w/$t/uv" "$w/$t/uvx" "$BIN_DIR/"
+  rc=$?
+  rm -rf "$w"
+  return $rc
+}
+
+# Python versions need a uv: install the latest one if there is none at all.
+[ -n "$PYTHON_WANT" ] && [ -z "$UV_WANT" ] && ! command -v uv >/dev/null 2>&1 \
+  && [ ! -x "$BIN_DIR/uv" ] && UV_WANT=latest
+if [ -n "$UV_WANT" ]; then
+  step "uv ($UV_WANT)"
+  uv_ver="$(uv_resolve "$UV_WANT" 2>/dev/null)"
+  uv_got="$(uv_version "$BIN_DIR/uv")"
+  if [ -z "$uv_ver" ]; then
+    echo "uv: could not resolve '$UV_WANT' (kept: ${uv_got:-none})"
+  elif [ "$uv_got" = "$uv_ver" ]; then
+    echo "uv already installed: $uv_got"
+  elif install_uv "$uv_ver"; then
+    echo "uv installed: $(uv_version "$BIN_DIR/uv" || echo '?')"
+  else
+    echo "uv install skipped (non-fatal - check network access to github.com)"
+  fi
+fi
+
+# --- Python versions managed by uv (~/.local/share/uv/python, linked as
+#     ~/.local/bin/python3.X). Never --default: that would put python/python3
+#     in ~/.local/bin, ahead of the system python3 the hooks run with. Projects
+#     pick a version with .python-version / requires-python, or uv run -p 3.X.
+if [ -n "$PYTHON_WANT" ]; then
+  step "python ($PYTHON_WANT, via uv)"
+  uv_bin="$BIN_DIR/uv"; [ -x "$uv_bin" ] || uv_bin="$(command -v uv)"
+  # shellcheck disable=SC2086 # word splitting is the point: one arg per version
+  if [ -z "$uv_bin" ]; then
+    echo "python skipped: no uv (set CLOUD_SETUP_UV)"
+  elif UV_NO_PROGRESS=1 "$uv_bin" python install ${PYTHON_WANT//,/ }; then
+    echo "python installed: $("$uv_bin" python list --only-installed --managed-python 2>/dev/null | awk '{print $1}' | tr '\n' ' ')"
+  else
+    echo "python install skipped (non-fatal - check network access to github.com)"
+  fi
+fi
+
 # ============================================================================
 # --- Secret guard: keep secrets set on the environment (BRAID_DOC_ID, ...)
 #   out of Claude's context.
@@ -252,6 +320,8 @@ mkdir -p "$HOME/.config/cloud-setup"
   echo "braid=$BRAID_VER"
   echo "quarto=$QUARTO_WANT"
   echo "r=$R_WANT"
+  echo "uv=${CLOUD_SETUP_UV:-}"
+  echo "python=$PYTHON_WANT"
   echo "attribution=${CLOUD_SETUP_ATTRIBUTION:-}"
 } > "$HOME/.config/cloud-setup/state"
 

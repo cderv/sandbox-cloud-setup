@@ -35,6 +35,7 @@ features_ok() {
   [ "${CLOUD_SETUP_ATTRIBUTION:-}" = "$(sed -n 's/^attribution=//p' "$1" 2>/dev/null)" ] || return 1
   [ "$q" = "$(sed -n 's/^quarto=//p' "$1" 2>/dev/null)" ] || return 1
   [ "$r" = "$(sed -n 's/^r=//p' "$1" 2>/dev/null)" ] || return 1
+  uv_ok "$1" && python_ok "$1" || return 1
   case "$q" in
     "") ;;
     release|prerelease) "$HOME/.local/bin/quarto" --version >/dev/null 2>&1 || return 1 ;;
@@ -46,6 +47,32 @@ features_ok() {
   [ -n "$r_got" ] || return 1
   [[ "$r" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 0
   [ "$r_got" = "$r" ]
+}
+
+# uv_bin: the uv setup.sh manages (~/.local/bin), else whatever is on PATH.
+uv_bin() {
+  if [ -x "$HOME/.local/bin/uv" ]; then echo "$HOME/.local/bin/uv"; else command -v uv; fi
+}
+
+# uv_ok <state-file>: CLOUD_SETUP_UV as recorded; an exact version must match.
+uv_ok() {
+  local u="${CLOUD_SETUP_UV:-}" got
+  [ "$u" = "$(sed -n 's/^uv=//p' "$1" 2>/dev/null)" ] || return 1
+  [ -z "$u" ] && return 0
+  got="$("$(uv_bin)" --version 2>/dev/null | awk '{print $2}')"
+  [ -n "$got" ] && { [ "$u" = latest ] || [ "$got" = "$u" ]; }
+}
+
+# python_ok <state-file>: CLOUD_SETUP_PYTHON as recorded, and uv finds a
+# uv-managed interpreter for each requested version.
+python_ok() {
+  local p="${CLOUD_SETUP_PYTHON:-}" v uv
+  [ "$p" = "$(sed -n 's/^python=//p' "$1" 2>/dev/null)" ] || return 1
+  [ -z "$p" ] && return 0
+  uv="$(uv_bin)"; [ -n "$uv" ] || return 1
+  for v in ${p//,/ }; do
+    "$uv" python find --managed-python "$v" >/dev/null 2>&1 || return 1
+  done
 }
 
 # r_version: version of the default R that rig linked in /usr/local/bin.
@@ -109,7 +136,7 @@ main() {
     problems+=("braid ${braid_got:-missing}, expected $braid_want")
   fi
   command -v gh >/dev/null 2>&1 || problems+=("gh missing")
-  features_ok "$state" || problems+=("opt-in feature not installed as requested (CLOUD_SETUP_QUARTO=${CLOUD_SETUP_QUARTO:-unset}, CLOUD_SETUP_R=${CLOUD_SETUP_R:-unset})")
+  features_ok "$state" || problems+=("opt-in feature not installed as requested (CLOUD_SETUP_QUARTO=${CLOUD_SETUP_QUARTO:-unset}, CLOUD_SETUP_R=${CLOUD_SETUP_R:-unset}, CLOUD_SETUP_UV=${CLOUD_SETUP_UV:-unset}, CLOUD_SETUP_PYTHON=${CLOUD_SETUP_PYTHON:-unset})")
   [ -n "${BRAID_SYNC_URL:-}" ] || problems+=("BRAID_SYNC_URL unset - braid would use the PUBLIC relay")
 
   # --- 3. report
@@ -117,6 +144,8 @@ main() {
     local extra=""
     [ -n "${CLOUD_SETUP_QUARTO:-}" ] && extra=", quarto $("$HOME/.local/bin/quarto" --version 2>/dev/null)"
     [ -n "${CLOUD_SETUP_R:-}" ] && extra="$extra, R $(r_version)"
+    [ -n "${CLOUD_SETUP_UV:-}" ] && extra="$extra, uv $("$(uv_bin)" --version 2>/dev/null | awk '{print $2}')"
+    [ -n "${CLOUD_SETUP_PYTHON:-}" ] && extra="$extra, python ${CLOUD_SETUP_PYTHON//,/ }"
     echo "cloud-setup: up to date (rev ${have_rev:0:7}, ${braid_got:-braid ?}, gh ok${extra})"
   else
     msg="cloud-setup WARNING: $(IFS=';'; echo "${problems[*]}"). Tell the user; run cloud-doctor for details."
