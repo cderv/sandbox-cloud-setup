@@ -14,6 +14,10 @@
 # and git for the repositories attached to the session. `gh` is installed only
 # if the image doesn't already ship it.
 #
+# Besides gh and braid, it installs the opt-in features that the environment's
+# CLOUD_SETUP_* variables ask for (Quarto, R via rig, uv, uv-managed Python):
+# see the "Opt-in features" section below and the README.
+#
 # Every step is non-fatal: a failed install must never block a session.
 set -uo pipefail
 

@@ -10,10 +10,16 @@
 # setup.sh (idempotent). Pin or roll back by setting CLOUD_SETUP_REF on the
 # environment: new sessions pick it up.
 #
-# Then it checks braid / gh against what setup.sh recorded. A problem is
-# reported to the user (systemMessage) and to Claude (additionalContext);
-# a healthy start adds one short line to Claude's context. Never fails the
-# session: always exit 0. Prints no secret (variable names only).
+# It also re-runs setup.sh once when a tool is missing or an opt-in
+# CLOUD_SETUP_* variable (Quarto, R, uv, Python, attribution) differs from
+# the value setup.sh last ran with: changing a variable does not rebuild the
+# cached image, so this is how a newly requested feature gets installed.
+#
+# Then it checks braid / gh / the opt-in features against what setup.sh
+# recorded. A problem is reported to the user (systemMessage) and to Claude
+# (additionalContext); a healthy start adds one short line to Claude's
+# context, listing the opt-in features installed. Never fails the session:
+# always exit 0. Prints no secret (variable names only).
 set -uo pipefail
 
 # tools_ok <state-file>: braid at the recorded version, gh present, and the
