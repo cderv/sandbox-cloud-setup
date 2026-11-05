@@ -107,6 +107,9 @@ def main():
              f"{exe} (~/.agent-browser/config.json)" if exe else "no executablePath in ~/.agent-browser/config.json")
         skill = os.path.expanduser("~/.claude/skills/agent-browser/SKILL.md")
         line(os.path.isfile(skill), "agent-browser skill", skill if os.path.isfile(skill) else "missing")
+    if opt("JUST", defaults)[0]:
+        skill = os.path.expanduser("~/.claude/skills/just/SKILL.md")
+        line(os.path.isfile(skill), "just skill", skill if os.path.isfile(skill) else "missing")
     r, src = opt("R", defaults)
     if r:
         p = subprocess.run(["/usr/local/bin/Rscript", "-e", "cat(format(getRversion()))"],

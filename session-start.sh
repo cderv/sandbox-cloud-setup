@@ -101,6 +101,28 @@ python_ok() {
   done
 }
 
+# just_hint: one line for Claude's context when the session's project has a
+# justfile and just is installed: its public recipes, or only their count
+# when there are many. Empty otherwise, and on any error (never fails).
+# `just --summary` parses the justfile without running anything.
+just_hint() {
+  local dir="${CLAUDE_PROJECT_DIR:-$PWD}" jb f s n
+  jb="$HOME/.local/bin/just"; [ -x "$jb" ] || jb="$(command -v just 2>/dev/null)" || return 0
+  for f in justfile Justfile .justfile; do
+    [ -f "$dir/$f" ] && break
+    f=""
+  done
+  [ -n "$f" ] || return 0
+  s="$(timeout 5 "$jb" --justfile "$dir/$f" --working-directory "$dir" --summary 2>/dev/null)" || return 0
+  n="$(wc -w <<<"$s")"
+  [ "$n" -gt 0 ] || return 0
+  if [ "$n" -le 20 ]; then
+    echo "justfile: recipes ${s//$'\n'/ } - prefer \`just <recipe>\` for these tasks."
+  else
+    echo "justfile: $n recipes (run \`just --list\`) - prefer \`just <recipe>\` for these tasks."
+  fi
+}
+
 # r_version: version of the default R that rig linked in /usr/local/bin.
 r_version() {
   /usr/local/bin/Rscript -e 'cat(format(getRversion()))' 2>/dev/null
@@ -170,7 +192,9 @@ main() {
     esac
   done
 
-  # --- 3. report
+  # --- 3. report (plus the project's justfile recipes, for Claude only)
+  local hint
+  hint="$(just_hint)"
   if [ "${#problems[@]}" -eq 0 ]; then
     local extra=""
     [ -n "$(opt BRAID)" ] && extra+=", $("$HOME/.local/bin/braid" --version 2>/dev/null)"
@@ -181,9 +205,10 @@ main() {
     [ -n "$(opt AGENT_BROWSER)" ] && extra+=", $("$HOME/.local/bin/agent-browser" --version 2>/dev/null)"
     [ -n "$(opt JUST)" ] && extra+=", $("$HOME/.local/bin/just" --version 2>/dev/null)"
     echo "cloud-setup: up to date (rev ${have_rev:0:7}, gh ok${extra})"
+    [ -z "$hint" ] || echo "$hint"
   else
     msg="cloud-setup WARNING: $(IFS=';'; echo "${problems[*]}"). Tell the user; run cloud-doctor for details."
-    python3 -c 'import json,sys; m=sys.argv[1]; print(json.dumps({"systemMessage": m, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": m}}))' "$msg"
+    python3 -c 'import json,sys; m, h = sys.argv[1], sys.argv[2]; print(json.dumps({"systemMessage": m, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": m + ("\n" + h if h else "")}}))' "$msg" "$hint"
   fi
 }
 

@@ -105,5 +105,11 @@ jobs:
           grep -q '^just installed: [0-9]' "$RUNNER_TEMP/1.log"
           "$HOME/.local/bin/just" --version
           grep -qx 'just=latest' "$HOME/.config/cloud-setup/state"
+          test -f "$HOME/.claude/skills/just/SKILL.md"
+          # a project justfile -> its recipes in Claude's context
+          mkdir -p "$RUNNER_TEMP/proj" && printf 'build:\n  echo b\n\ntest: build\n  echo t\n\n_hidden:\n  echo h\n' > "$RUNNER_TEMP/proj/justfile"
+          out="$(CLAUDE_PROJECT_DIR="$RUNNER_TEMP/proj" CLOUD_SETUP_REPO="$GITHUB_WORKSPACE" CLOUD_SETUP_REF="$GITHUB_SHA" bash session-start.sh)"; echo "$out"
+          [[ "$out" == *"justfile: recipes build test - prefer"* ]]
           bash setup.sh 2>&1 | tee "$RUNNER_TEMP/2.log"
           grep -q '^just already installed: ' "$RUNNER_TEMP/2.log"
+          ! grep -q 'just: skill installed' "$RUNNER_TEMP/2.log"

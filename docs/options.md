@@ -8,7 +8,7 @@
 | `CLOUD_SETUP_UV` | `latest` or an exact version (`0.13.7`) | Installs `uv` and `uvx` from their GitHub release into `~/.local/bin`, replacing the copy the image may ship (it can lag behind). `latest` resolves the newest stable tag when setup runs. Empty: the image's uv, if any, is left alone. |
 | `CLOUD_SETUP_PYTHON` | one or more versions, space- or comma-separated (`3.12`, `3.12 3.14`, `3.12.13`) | Runs `uv python install <versions>`: uv-managed CPython in `~/.local/share/uv/python`, linked as `~/.local/bin/python3.X`. If no uv exists at all, installs the latest one first. |
 | `CLOUD_SETUP_AGENT_BROWSER` | `latest`, or an exact version (`0.41.2`) | Installs [agent-browser](agent-browser.md) and its Claude Code skill, set up to use the image's Chromium. |
-| `CLOUD_SETUP_JUST` | `latest` or an exact version (`1.59.0`) | Installs [just](https://github.com/casey/just), the command runner for `justfile` recipes, from its GitHub release (static musl binary, checked against the release's `SHA256SUMS`) into `~/.local/bin/just`. `latest` resolves the newest stable tag when setup runs. Needs only `github.com`: Trusted is enough (the `just.systems` install script is not on the Trusted list, so it is not used). |
+| `CLOUD_SETUP_JUST` | `latest` or an exact version (`1.59.0`) | Installs [just](https://github.com/casey/just), the command runner for `justfile` recipes, from its GitHub release (static musl binary, checked against the release's `SHA256SUMS`) into `~/.local/bin/just`, and just's official Claude Code skill (`skills/just` in its repo, at the same tag) into `~/.claude/skills/just`. `latest` resolves the newest stable tag when setup runs. Needs `github.com` and `raw.githubusercontent.com`: Trusted is enough (the `just.systems` install script is not on the Trusted list, so it is not used). See [justfile notes](#justfile-notes). |
 | `CLOUD_SETUP_ATTRIBUTION` | `keep` | By default setup writes `"attribution": {"commit": "", "pr": "", "sessionUrl": false}` to `~/.claude/settings.json`, so commits and PRs carry no Co-Authored-By trailer, no `Claude-Session:` link and no PR-body session link. `keep` leaves Claude Code's default attribution. |
 | `CLOUD_SETUP_SECRET_VARS` | variable names, comma-separated (`MY_API_KEY,OTHER_TOKEN`) | Extra environment variables the [secret guard](secret-guard.md) keeps out of Claude's context, on top of `BRAID_DOC_ID`. **Names only, never values.** |
 | `CLOUD_SETUP_REF` | branch, tag or full 40-char SHA | Which commit of the repo to follow. In the block it is `PIN`; as a variable it wins over `PIN`. See [pinning](how-it-works.md#pinning-and-the-trust-model). |
@@ -74,6 +74,19 @@ disappears at the next image rebuild. See [Updating an environment](migration.md
   seconds): `CLOUD_SETUP_PYTHON` only puts it in the cached image ahead of
   time.
 - uv and Python come from GitHub releases: Trusted is enough.
+
+## justfile notes
+
+- When `just` is installed (by this option or otherwise) and the session's
+  project has a `justfile` (`Justfile`, `.justfile`) at its root, the
+  session-start hook adds one line to Claude's context:
+  ``justfile: recipes build test lint - prefer `just <recipe>` for these tasks.``
+  With more than 20 recipes it gives only their count. It comes from
+  `just --summary`, which parses the justfile without running anything, with
+  a 5 s limit; any error just leaves the line out.
+- The skill is just's own (`npx skills add casey/just` installs the same
+  file): a short reference of `just` commands and justfile syntax that Claude
+  loads when it works with a justfile.
 
 ## Install times
 

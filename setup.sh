@@ -394,6 +394,23 @@ install_just() {
   return $rc
 }
 
+# install_just_skill <version>: just's official Claude Code skill (in the
+# repo at skills/just, not in the release tarball), fetched at the installed
+# version's tag into ~/.claude/skills/just. Skipped when already there for
+# that version.
+install_just_skill() {
+  local ver="$1" d="$HOME/.claude/skills/just" w
+  [ -f "$d/SKILL.md" ] && [ "$(cat "$d/.version" 2>/dev/null)" = "$ver" ] && return 0
+  w="$(mktemp -d)"
+  if curl -fsSL "https://raw.githubusercontent.com/casey/just/${ver}/skills/just/SKILL.md" -o "$w/SKILL.md"; then
+    mkdir -p "$d" && cp "$w/SKILL.md" "$d/SKILL.md" && echo "$ver" > "$d/.version" \
+      && echo "just: skill installed in ~/.claude/skills/just"
+  else
+    echo "just: skill skipped (not found for $ver on raw.githubusercontent.com)"
+  fi
+  rm -rf "$w"
+}
+
 if [ -n "$JUST_WANT" ]; then
   step "just ($JUST_WANT)"
   just_ver="$(just_resolve "$JUST_WANT" 2>/dev/null)"
@@ -407,6 +424,8 @@ if [ -n "$JUST_WANT" ]; then
   else
     echo "just install skipped (non-fatal - check the version and network access to github.com)"
   fi
+  just_got="$(just_version)"
+  [ -n "$just_got" ] && install_just_skill "$just_got"
 fi
 
 # ============================================================================

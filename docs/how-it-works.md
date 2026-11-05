@@ -9,7 +9,7 @@
      ├─ fetches REPO at PIN into /opt/sandbox-cloud-setup (public, no token)
      └─ runs setup.sh
           ├─ gh (only if missing) → ~/.local/bin/gh
-          ├─ options              → braid, quarto, R (rig), uv, python, just, agent-browser (+ skill), attribution
+          ├─ options              → braid, quarto, R (rig), uv, python, just (+ skill), agent-browser (+ skill), attribution
           ├─ secret-guard.py + session-start.sh → ~/.claude/hooks/, registered in ~/.claude/settings.json
           └─ ~/.config/cloud-setup/state  (rev=, ref=, repo=, braid=, and each option's value)
 
@@ -19,6 +19,7 @@
      ├─ that commit != rev= ?  → re-runs its setup.sh (idempotent)
      ├─ a tool missing, or an option's wanted value != the state ? → re-runs setup.sh once
      └─ reports: one line to Claude when healthy, a warning to you otherwise
+        (+ the project's justfile recipes, when there is one and just is installed)
 
 3. EVERY TOOL CALL
    PreToolUse  → deny commands that would print a secret
@@ -95,5 +96,6 @@ self-update: pin a commit that contains it.
 | `~/.local/bin/{gh,braid,quarto,just,agent-browser,cloud-doctor}` | `setup.sh` | Tools (`gh` only if the image lacks it). |
 | `/opt/quarto/<version>/`, `/opt/agent-browser/<version>/`, `/opt/R/<version>/` (+ `/usr/local/bin/{rig,R,Rscript}`), `~/.local/share/uv/python/` | `setup.sh` | Opt-in installs. |
 | `~/.agent-browser/config.json`, `~/.claude/skills/agent-browser/` | `setup.sh` | agent-browser browser path and skill. |
+| `~/.claude/skills/just/` | `setup.sh` | just's official skill (with `.version`). |
 
 `HOME` is `/root` in the cloud VM.
