@@ -84,7 +84,7 @@ step "extra tools"
 #     session-start.sh re-runs this file when a requested feature is missing
 #     or its wanted value differs from the one recorded in the state file.
 #
-#   CLOUD_SETUP_BRAID         = <exact version, e.g. 0.8.1>
+#   CLOUD_SETUP_BRAID         = latest | <exact version, e.g. 0.8.1>
 #   CLOUD_SETUP_QUARTO        = release | prerelease | <exact version, e.g. 1.11.9>
 #   CLOUD_SETUP_R             = release | <exact version, e.g. 4.5.2> (via rig)
 #   CLOUD_SETUP_UV            = latest | <exact version, e.g. 0.13.7>
@@ -94,7 +94,7 @@ step "extra tools"
 #   CLOUD_SETUP_ATTRIBUTION   = keep  (default: no Claude attribution in commits
 #                                      and PRs; applied with the hooks below)
 # ============================================================================
-BRAID_WANT="$(opt BRAID)"; BRAID_WANT="${BRAID_WANT#v}"
+BRAID_OPT="$(opt BRAID)"; BRAID_OPT="${BRAID_OPT#v}"
 QUARTO_WANT="$(opt QUARTO)"
 R_WANT="$(opt R)"
 UV_OPT="$(opt UV)"; UV_WANT="$UV_OPT"
@@ -107,9 +107,24 @@ ATTRIBUTION="$(opt ATTRIBUTION)"
 #     installer, fetched at the requested tag. Keep every peer (laptop,
 #     cloud) on the same version. minisign (optional) lets the installer
 #     check the Ed25519 release signature; without it, checksum only.
-if [ -n "$BRAID_WANT" ]; then
-  step "braid v$BRAID_WANT"
-  if "$BIN_DIR/braid" --version 2>/dev/null | grep -qF "$BRAID_WANT"; then
+# braid_resolve <spec>: latest -> newest stable tag without its "v" (git,
+# like gh above: the installer's own lookup uses api.github.com and the
+# /releases/latest page, both refused under Trusted).
+braid_resolve() {
+  case "$1" in
+    latest) git ls-remote --tags --refs https://github.com/cscheid/braid \
+              | sed 's#.*refs/tags/v##' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sort -V | tail -1 ;;
+    *) echo "$1" ;;
+  esac
+}
+
+if [ -n "$BRAID_OPT" ]; then
+  step "braid ($BRAID_OPT)"
+  BRAID_WANT="$(braid_resolve "$BRAID_OPT" 2>/dev/null)"
+  if [ -z "$BRAID_WANT" ]; then
+    echo "braid: could not resolve '$BRAID_OPT' (kept: $("$BIN_DIR/braid" --version 2>/dev/null || echo none))"
+  elif "$BIN_DIR/braid" --version 2>/dev/null | grep -qF "$BRAID_WANT"; then
     echo "braid already installed: $("$BIN_DIR/braid" --version)"
   else
     command -v minisign >/dev/null 2>&1 \
@@ -499,7 +514,7 @@ mkdir -p "$HOME/.config/cloud-setup"
   echo "rev=$rev"
   echo "ref=${base_ref:-$rev}"
   echo "repo=$base_repo"
-  echo "braid=$BRAID_WANT"
+  echo "braid=$BRAID_OPT"
   echo "quarto=$QUARTO_WANT"
   echo "r=$R_WANT"
   echo "uv=$UV_OPT"

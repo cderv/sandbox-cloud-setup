@@ -37,6 +37,15 @@ jobs:
           out="$(bash session-start.sh)"; echo "$out"; [[ "$out" == "cloud-setup: up to date"* ]]
           unset BRAID_SYNC_URL
           bash session-start.sh | python3 -c "import json,sys; d=json.load(sys.stdin); assert 'BRAID_SYNC_URL' in d['systemMessage'], d; print('warning ok')"
+      - name: setup.sh with CLOUD_SETUP_BRAID=latest (resolved to the newest tag)
+        env:
+          CLOUD_SETUP_BRAID: latest
+        run: |
+          export HOME="$RUNNER_TEMP/bl"
+          bash setup.sh
+          want="$(git ls-remote --tags --refs https://github.com/cscheid/braid | sed 's#.*refs/tags/v##' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+          "$HOME/.local/bin/braid" --version | grep -F "$want"
+          grep -qx 'braid=latest' "$HOME/.config/cloud-setup/state"
       - name: bootstrap options block (agent-browser, no braid), then a variable turning it off
         env:
           CLOUD_SETUP_REPO: ${{ github.workspace }}

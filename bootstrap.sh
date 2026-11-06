@@ -12,7 +12,7 @@ set -uo pipefail
 #
 # The same names set as environment VARIABLES also work and win over these,
 # but are installed by the session-start hook at each new session (not cached).
-CLOUD_SETUP_BRAID=""           # exact version (0.8.1)
+CLOUD_SETUP_BRAID=""           # latest | exact version (0.8.1)
 CLOUD_SETUP_QUARTO=""          # release | prerelease | exact version (1.11.9)
 CLOUD_SETUP_R=""               # release | exact version (4.5.2); needs Custom network
 CLOUD_SETUP_UV=""              # latest | exact version (0.13.7)

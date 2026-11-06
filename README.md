@@ -30,7 +30,7 @@ that ([details](docs/environments.md)).
    want in its options block:
 
    ```bash
-   CLOUD_SETUP_BRAID=""                # 0.8.1
+   CLOUD_SETUP_BRAID=""                # latest | 0.8.1
    CLOUD_SETUP_QUARTO="release"        # release | prerelease | 1.11.9
    CLOUD_SETUP_R=""                    # release | 4.5.2 (needs Custom network)
    CLOUD_SETUP_UV=""                   # latest | 0.13.7
